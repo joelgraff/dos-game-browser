@@ -1,7 +1,7 @@
 # Local DOSBox conf (absolute mount paths)
 config/dosbox.local.conf
 
-# Game binaries / assets (copyrighted or large - never commit)
+# Game binaries / assets (copyrighted or large — never commit)
 # Keep booth/GAMES/README.md so clones know where games go.
 booth/GAMES/*
 !booth/GAMES/README.md

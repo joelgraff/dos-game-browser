@@ -28,7 +28,7 @@ mkdir -p "$ROOT/booth/UTILS"
 
 "$NASM" -f bin -o "$ROOT/booth/UTILS/ABORT.COM" "$ROOT/src/abort.asm"
 "$NASM" -f bin -o "$ROOT/booth/UTILS/VDETECT.COM" "$ROOT/src/vdetect.asm"
-"$NASM" -f bin -I "$ROOT/src/" -o "$ROOT/booth/BROWSER.COM" "$ROOT/src/browser.asm"
+"$NASM" -f bin -o "$ROOT/booth/BROWSER.COM" "$ROOT/src/browser.asm"
 
 # DOS expects CRLF in batch files
 if [[ -f "$ROOT/booth/START.BAT" ]]; then
