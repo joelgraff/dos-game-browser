@@ -1,0 +1,181 @@
+{
+  "_comment": "Sample pack for DOS Game Browser. Only free, public-domain, or redistributable shareware. Games are NOT shipped in the repo — fetch with tools/fetch-samples.py.",
+  "games": [
+    {
+      "id": "HELLOWOR",
+      "title": "Hello World (test)",
+      "year": "2024",
+      "genre": "Other",
+      "publisher": "dos-game-browser",
+      "exe": "HELLOWO.COM",
+      "note": "Built-in smoke test; no download needed",
+      "source": "builtin",
+      "license": "MIT"
+    },
+    {
+      "id": "SNAKEMIN",
+      "title": "Snake Mini",
+      "year": "2024",
+      "genre": "Action",
+      "publisher": "dos-game-browser",
+      "exe": "SNAKEMI.COM",
+      "note": "Tiny built-in snake demo",
+      "source": "builtin",
+      "license": "MIT"
+    },
+    {
+      "id": "SOPWITH1",
+      "title": "Sopwith",
+      "year": "1984",
+      "genre": "Action",
+      "publisher": "BMB Compuscience",
+      "exe": "SOPWITH.EXE",
+      "note": "Classic biplane shooter (Authors Edition)",
+      "source": "url",
+      "license": "Authors Edition free redistrib",
+      "url": "https://archive.org/download/SopwithTheAuthorsEdition/SOPWITH.zip",
+      "strip_components": 0,
+      "pick": [
+        "SOPWITH.EXE",
+        "SOPWITH.DOC",
+        "SOPWITH.BAT",
+        "SOPWITH0.DTA",
+        "*.DTA",
+        "*.DOC",
+        "*.TXT",
+        "*.EXE",
+        "*.COM",
+        "*.BAT"
+      ]
+    },
+    {
+      "id": "DIGGERRE",
+      "title": "Digger Remastered",
+      "year": "1998",
+      "genre": "Action",
+      "publisher": "Andrew Jenner / Windmill",
+      "exe": "DIGGER.EXE",
+      "note": "Remastered Digger (free DOS build)",
+      "source": "url",
+      "license": "GPL / freeware rebuild",
+      "url": "https://github.com/sobodash/digger/archive/refs/heads/master.zip",
+      "fallback_urls": [
+        "https://archive.org/download/digger_remastered/digger.zip",
+        "https://www.digger.org/digger-20010816.tar.gz"
+      ],
+      "strip_components": 0,
+      "pick": [
+        "DIGGER.EXE",
+        "CWSDPMI.EXE",
+        "*.EXE",
+        "*.TXT",
+        "*.DOC",
+        "DIGGER.*"
+      ]
+    },
+    {
+      "id": "PHARAOHS",
+      "title": "Pharaoh's Tomb",
+      "year": "1990",
+      "genre": "Platform",
+      "publisher": "Apogee Software",
+      "exe": "PTOMB1.EXE",
+      "note": "Apogee shareware episode 1",
+      "source": "url",
+      "license": "Shareware (episode 1 free)",
+      "url": "https://archive.org/download/msdos_Pharaohs_Tomb_1990/Pharaohs_Tomb_1990.zip",
+      "strip_components": 0,
+      "pick": [
+        "PTOMB*.EXE",
+        "PTOMB*.MNU",
+        "*.EXE",
+        "*.MNU",
+        "*.TXT",
+        "*.DOC",
+        "README*"
+      ]
+    },
+    {
+      "id": "JILLOFTH",
+      "title": "Jill of the Jungle",
+      "year": "1992",
+      "genre": "Platform",
+      "publisher": "Epic MegaGames",
+      "exe": "JILL1.EXE",
+      "note": "Epic shareware episode 1",
+      "source": "url",
+      "license": "Shareware (episode 1 free)",
+      "url": "https://archive.org/download/msdos_Jill_of_the_Jungle_1992/Jill_of_the_Jungle_1992.zip",
+      "strip_components": 0,
+      "pick": [
+        "JILL1.EXE",
+        "JILL.EXE",
+        "*.EXE",
+        "*.JN1",
+        "*.DDT",
+        "*.DOC",
+        "*.TXT",
+        "FILE_ID.DIZ",
+        "*.SHA",
+        "*.VCL",
+        "*.CFG",
+        "*.DMA",
+        "*.MAC",
+        "*.EPC",
+        "*.ANS",
+        "*.DEM"
+      ]
+    },
+    {
+      "id": "COMMANDE",
+      "title": "Commander Keen 1",
+      "year": "1990",
+      "genre": "Platform",
+      "publisher": "id Software",
+      "exe": "KEEN1.EXE",
+      "subdir": "KEEN",
+      "note": "id Software shareware (Marooned on Mars)",
+      "source": "url",
+      "license": "Shareware",
+      "url": "https://archive.org/download/msdos_Commander_Keen_1_-_Marooned_on_Mars_1990/Commander_Keen_1_-_Marooned_on_Mars_1990.zip",
+      "strip_components": 0,
+      "pick": [
+        "KEEN1.EXE",
+        "*.CK1",
+        "*.EXE",
+        "*.TXT",
+        "*.DOC",
+        "*.FRM"
+      ]
+    },
+    {
+      "id": "ALEXTHEA",
+      "title": "Alex the Allegator 1",
+      "year": "1999",
+      "genre": "Platform",
+      "publisher": "Johan Peitz / Free Lunch Design",
+      "exe": "ALEX.EXE",
+      "subdir": "ALEX1",
+      "note": "Freeware platformer",
+      "source": "url",
+      "license": "Freeware",
+      "url": "https://archive.org/download/alex-the-allegator/alex1.zip",
+      "fallback_urls": [
+        "https://archive.org/download/AlexTheAllegator/alex.zip"
+      ],
+      "strip_components": 0,
+      "pick": [
+        "ALEX.EXE",
+        "CWSDPMI.EXE",
+        "*.EXE",
+        "*.DAT",
+        "*.MAP",
+        "*.TXT",
+        "*.H",
+        "*.C",
+        "*.DOC",
+        "FILE_ID.DIZ"
+      ]
+    }
+  ]
+}
