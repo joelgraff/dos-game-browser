@@ -1,0 +1,34 @@
+name: Build COM binaries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tools/build.sh"
+      - ".github/workflows/build-binaries.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NASM
+        run: sudo apt-get update && sudo apt-get install -y nasm
+
+      - name: Assemble
+        run: |
+          chmod +x tools/build.sh
+          ./tools/build.sh
+          ls -la booth/BROWSER.COM booth/UTILS/
+
+      - name: Commit prebuilt binaries if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Build: update prebuilt COM binaries from NASM sources"
+          file_pattern: booth/BROWSER.COM booth/UTILS/*.COM booth/START.BAT

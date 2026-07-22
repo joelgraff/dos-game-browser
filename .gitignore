@@ -1,0 +1,30 @@
+# Local DOSBox conf (absolute mount paths)
+config/dosbox.local.conf
+
+# Game binaries / assets (copyrighted or large - never commit)
+# Keep booth/GAMES/README.md so clones know where games go.
+booth/GAMES/*
+!booth/GAMES/README.md
+
+# Regenerated index (rebuild with tools/scan-games.py)
+booth/GAMES.LST
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build scratch / staged CF image (regenerate with tools/make-media.sh)
+dist/
+media/
+*.o
+*.obj
+*.map
