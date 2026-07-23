@@ -15,6 +15,7 @@ Thumbs.db
 *~
 *.swp
 *.tmp
+.reflex/
 
 # Python
 __pycache__/

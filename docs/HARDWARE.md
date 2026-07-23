@@ -22,7 +22,7 @@ Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Inst
 
 ## Copy checklist
 
-1. On the host: `python3 tools/scan-games.py` then `./tools/make-media.sh`
+1. On the host: `python tools/scan-games.py` then `./tools/make-media.sh`
 2. Mount the CF/USB volume on the host (or use a USB card reader)
 3. Copy **contents** of `media/booth/` to a dedicated launcher directory, such as `C:\DGB\`
 4. Edit target `AUTOEXEC.BAT` to `CALL C:\DGB\START.BAT` if you want kiosk auto-start
@@ -33,7 +33,7 @@ If you already have an MS-DOS image with games on it:
 1. Mount the image on the host system.
 2. Copy the launcher tree into its own directory inside the image, such as `C:\DGB\`.
 3. Place your game folders under `C:\DGB\GAMES\`.
-4. Run `python3 tools/scan-games.py` from the host after the games are copied in.
+4. Run `python tools/scan-games.py` from the host after the games are copied in.
 5. Review and hand-edit the generated `GAME.TXT` files where the scanner could not infer correct metadata.
 6. Re-run the scanner, then stage the image again.
 
@@ -64,8 +64,8 @@ Not every protected-mode or DPMI title will unwind cleanly; still better than a 
 
 ```bash
 ./tools/build.sh
-python3 tools/fetch-samples.py --only HELLOWOR
-python3 tools/scan-games.py
+python tools/fetch-samples.py --only HELLOWOR
+python tools/scan-games.py
 ./tools/run.sh
 ```
 

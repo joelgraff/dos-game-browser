@@ -39,14 +39,14 @@ Lines starting with `#` are comments. Keys are case-insensitive.
 
 ```bash
 # After adding or changing games:
-python3 tools/scan-games.py
+python tools/scan-games.py
 
 # Prefer catalog titles/years when GAME.TXT is incomplete:
-python3 tools/scan-games.py --apply-catalog
+python tools/scan-games.py --apply-catalog
 
 # Sort options: genre (default), year, title
-python3 tools/scan-games.py --sort year
-python3 tools/scan-games.py --no-headers
+python tools/scan-games.py --sort year
+python tools/scan-games.py --no-headers
 ```
 
 If `exe=` is missing, the scanner picks a launch file from `.EXE` / `.COM` / `.BAT`, preferring names like `start.bat`, `jill.exe`, `keen1.exe`, and skipping `setup.exe`, `cwsdpmi.exe`, `catalog.exe`, etc.

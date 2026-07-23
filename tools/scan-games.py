@@ -6,12 +6,12 @@ This is the config autogenerator for the launcher: edit per-game GAME.TXT
 (or let this tool seed it), then re-run to rebuild booth/GAMES.LST.
 
 Usage:
-  python3 tools/scan-games.py
-  python3 tools/scan-games.py --sort genre    # default: genre headers
-  python3 tools/scan-games.py --sort year
-  python3 tools/scan-games.py --sort title
-  python3 tools/scan-games.py --no-headers
-  python3 tools/scan-games.py --apply-catalog  # fill gaps from sample-catalog.json
+    python tools/scan-games.py
+    python tools/scan-games.py --sort genre     # default: genre headers
+    python tools/scan-games.py --sort year
+    python tools/scan-games.py --sort title
+    python tools/scan-games.py --no-headers
+    python tools/scan-games.py --apply-catalog  # fill gaps from sample-catalog.json
 """
 from __future__ import annotations
 
@@ -69,25 +69,28 @@ def find_exes(folder: Path) -> list[Path]:
     return found
 
 
-def pick_exe(folder: Path) -> tuple[str, str] | None:
+def pick_exe(folder: Path, games_root: Path) -> tuple[str, str] | None:
     """Return (relpath_from_GAMES with backslash, exe filename) or None."""
     exes = find_exes(folder)
     if not exes:
         return None
+
+    ext_rank = {".bat": 0, ".exe": 1, ".com": 2}
 
     def score(p: Path):
         n = p.name.lower()
         try:
             pref = PREFER_EXE.index(n)
         except ValueError:
-            pref = 100
+            pref = len(PREFER_EXE) + 1
+        ext = ext_rank.get(p.suffix.lower(), 9)
         depth = len(p.relative_to(folder).parts)
-        return (pref, depth, n)
+        return (ext, pref, depth, n)
 
     best = sorted(exes, key=score)[0]
     # dir relative to GAMES, exe name only in that dir
     # If exe is in subfolder of game root, dir becomes GAMES/game/sub
-    rel_dir = best.parent.relative_to(GAMES)
+    rel_dir = best.parent.relative_to(games_root)
     return str(rel_dir).replace("/", "\\"), best.name
 
 
@@ -191,7 +194,7 @@ def main() -> int:
 
     records = []
     for pkg in packages:
-        picked = pick_exe(pkg)
+        picked = pick_exe(pkg, games_root)
         if not picked:
             print(f"  skip {pkg.name}: no executable")
             continue
@@ -249,7 +252,7 @@ def main() -> int:
     if not records:
         print("No games found", file=sys.stderr)
         print(
-            "Add folders under booth/GAMES or run: python3 tools/fetch-samples.py",
+            "Add folders under booth/GAMES or run: python tools/fetch-samples.py",
             file=sys.stderr,
         )
         return 1

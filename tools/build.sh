@@ -3,6 +3,26 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+find_python() {
+  local c
+  for c in \
+    "$(command -v python3 2>/dev/null || true)" \
+    "$(command -v python 2>/dev/null || true)"
+  do
+    if [[ -n "$c" && -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+
+  if command -v py >/dev/null 2>&1; then
+    echo "py -3"
+    return 0
+  fi
+
+  return 1
+}
+
 find_nasm() {
   local c
   for c in \
@@ -23,6 +43,11 @@ NASM="$(find_nasm)" || {
   exit 1
 }
 
+PYTHON_CMD="$(find_python)" || {
+  echo "Python 3 not found. Install Python and ensure python3/python/py is available." >&2
+  exit 1
+}
+
 echo "NASM=$NASM"
 mkdir -p "$ROOT/booth/UTILS"
 
@@ -32,7 +57,7 @@ mkdir -p "$ROOT/booth/UTILS"
 
 # DOS expects CRLF in batch files
 if [[ -f "$ROOT/booth/START.BAT" ]]; then
-  python3 - <<PY
+  $PYTHON_CMD - <<PY
 from pathlib import Path
 p = Path("$ROOT/booth/START.BAT")
 t = p.read_text(encoding="ascii", errors="replace").replace("\r\n", "\n").replace("\n", "\r\n")

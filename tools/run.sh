@@ -3,6 +3,26 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+find_python() {
+  local c
+  for c in \
+    "$(command -v python3 2>/dev/null || true)" \
+    "$(command -v python 2>/dev/null || true)"
+  do
+    if [[ -n "$c" && -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+
+  if command -v py >/dev/null 2>&1; then
+    echo "py -3"
+    return 0
+  fi
+
+  return 1
+}
+
 find_dosbox() {
   local c
   for c in \
@@ -27,20 +47,26 @@ DB="$(find_dosbox)" || {
   exit 1
 }
 
+PYTHON_CMD="$(find_python)" || {
+  echo "Python 3 not found. Install Python and ensure python3/python/py is available." >&2
+  exit 1
+}
+
 if [[ ! -s "$ROOT/booth/BROWSER.COM" ]]; then
   echo "Building browser..."
   "$ROOT/tools/build.sh"
 fi
 
 if [[ ! -f "$ROOT/booth/GAMES.LST" ]]; then
-  if compgen -G "$ROOT/booth/GAMES/*/GAME.TXT" >/dev/null 2>&1 \
-     || compgen -G "$ROOT/booth/GAMES/*/*.[Ee][Xx][Ee]" >/dev/null 2>&1; then
+  if find "$ROOT/booth/GAMES" -type f \( \
+      -iname 'GAME.TXT' -o -iname '*.exe' -o -iname '*.com' -o -iname '*.bat' \
+    \) -print -quit | grep -q .; then
     echo "Scanning games..."
-    python3 "$ROOT/tools/scan-games.py"
+    $PYTHON_CMD "$ROOT/tools/scan-games.py"
   else
     echo "No games in booth/GAMES yet."
-    echo "  python3 tools/fetch-samples.py"
-    echo "  python3 tools/scan-games.py"
+    echo "  python tools/fetch-samples.py   # or: py -3 tools/fetch-samples.py"
+    echo "  python tools/scan-games.py      # or: py -3 tools/scan-games.py"
     # Allow UI to load with empty index message
     printf '# GAMES.LST - empty\r\n' > "$ROOT/booth/GAMES.LST"
   fi

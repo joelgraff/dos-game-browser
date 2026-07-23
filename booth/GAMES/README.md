@@ -14,7 +14,7 @@ GAMES\
 Create or edit `GAME.TXT` in each folder (see `docs/FORMAT.md`), then rebuild the index:
 
 ```bash
-python3 tools/scan-games.py
+python tools/scan-games.py
 ```
 
 ## Getting sample games
@@ -22,9 +22,9 @@ python3 tools/scan-games.py
 Games are **not** included in this repository. On a machine with network access:
 
 ```bash
-python3 tools/fetch-samples.py          # free/public-domain pack
-python3 tools/fetch-samples.py --list   # show catalog
-python3 tools/scan-games.py             # rebuild GAMES.LST
+python tools/fetch-samples.py          # free/public-domain pack
+python tools/fetch-samples.py --list   # show catalog
+python tools/scan-games.py             # rebuild GAMES.LST
 ```
 
 Or copy any MS-DOS games you own into `booth/GAMES/<DIR>/` and run `scan-games.py`.

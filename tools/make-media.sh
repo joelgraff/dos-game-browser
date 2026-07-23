@@ -12,6 +12,31 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST=""
 DO_ZIP=0
 
+find_python() {
+  local c
+  for c in \
+    "$(command -v python3 2>/dev/null || true)" \
+    "$(command -v python 2>/dev/null || true)"
+  do
+    if [[ -n "$c" && -x "$c" ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+
+  if command -v py >/dev/null 2>&1; then
+    echo "py -3"
+    return 0
+  fi
+
+  return 1
+}
+
+PYTHON_CMD="$(find_python)" || {
+  echo "Python 3 not found. Install Python and ensure python3/python/py is available." >&2
+  exit 1
+}
+
 for arg in "$@"; do
   case "$arg" in
     --zip) DO_ZIP=1 ;;
@@ -30,11 +55,13 @@ if [[ ! -s "$ROOT/booth/BROWSER.COM" ]]; then
 fi
 
 # Ensure index if games present
-if [[ -d "$ROOT/booth/GAMES" ]] && compgen -G "$ROOT/booth/GAMES/*/GAME.TXT" >/dev/null 2>&1; then
+if [[ -d "$ROOT/booth/GAMES" ]] && find "$ROOT/booth/GAMES" -type f \( \
+    -iname 'GAME.TXT' -o -iname '*.exe' -o -iname '*.com' -o -iname '*.bat' \
+  \) -print -quit | grep -q .; then
   echo "Refreshing GAMES.LST..."
-  python3 "$ROOT/tools/scan-games.py"
+  $PYTHON_CMD "$ROOT/tools/scan-games.py"
 elif [[ ! -f "$ROOT/booth/GAMES.LST" ]]; then
-  echo "WARNING: no games indexed. Run: python3 tools/fetch-samples.py && python3 tools/scan-games.py" >&2
+  echo "WARNING: no games indexed. Run: python tools/fetch-samples.py && python tools/scan-games.py" >&2
   # Minimal empty-safe list so browser can at least start and show error? Prefer a stub.
   printf '# GAMES.LST - no games yet\r\n' > "$ROOT/booth/GAMES.LST"
 fi
@@ -50,7 +77,7 @@ cp -a "$ROOT/booth/." "$STAGING/"
 rm -f "$STAGING/GAMES/README.md" 2>/dev/null || true
 
 # Normalize text files to CRLF for DOS
-STAGING="$STAGING" python3 - <<'PY'
+STAGING="$STAGING" $PYTHON_CMD - <<'PY'
 import os
 from pathlib import Path
 root = Path(os.environ["STAGING"])

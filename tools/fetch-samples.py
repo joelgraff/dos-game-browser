@@ -6,11 +6,11 @@ Does NOT ship copyrighted retail games. Only entries listed in
 tools/sample-catalog.json (public domain, freeware, or shareware demos).
 
 Usage:
-  python3 tools/fetch-samples.py              # download all
-  python3 tools/fetch-samples.py --list
-  python3 tools/fetch-samples.py --only HELLOWOR SOPWITH1
-  python3 tools/fetch-samples.py --seed-only  # write GAME.TXT stubs only
-  python3 tools/scan-games.py                 # after fetch: rebuild GAMES.LST
+    python tools/fetch-samples.py               # download all
+    python tools/fetch-samples.py --list
+    python tools/fetch-samples.py --only HELLOWOR SOPWITH1
+    python tools/fetch-samples.py --seed-only   # write GAME.TXT stubs only
+    python tools/scan-games.py                  # after fetch: rebuild GAMES.LST
 """
 from __future__ import annotations
 
@@ -289,7 +289,7 @@ def main() -> int:
             fail += 1
 
     print(f"\nDone: {ok} ok, {fail} failed → {GAMES}")
-    print("Next: python3 tools/scan-games.py")
+    print("Next: python tools/scan-games.py")
     return 0 if fail == 0 else 1
 
 

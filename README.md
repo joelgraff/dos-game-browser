@@ -54,7 +54,17 @@ Prebuilt `.COM` binaries ship in `booth/` so you can deploy without installing a
 | **DOSBox** or **DOSBox Staging** | Optional local test |
 | **zip** / **unzip** | Optional; fetch uses Python’s zipfile |
 
+Python command note: if `python3` is unavailable on your host, use `python` (or `py -3` on Windows). Host scripts auto-detect these variants.
+
+### Host command compatibility
+
+- Python invocations in docs use `python`, but host scripts auto-detect `python3`, `python`, and `py -3`.
+- DOSBox launch scripts auto-detect both `dosbox-staging` and `dosbox` command names.
+- PowerShell scripts support both Windows-style and Linux-style fallback tool paths.
+
 ### 2. Build (optional if prebuilts present)
+
+Linux/macOS:
 
 ```bash
 cd dos-game-browser
@@ -62,22 +72,52 @@ chmod +x tools/*.sh
 ./tools/build.sh
 ```
 
+Windows (PowerShell):
+
+```powershell
+cd dos-game-browser
+powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
+```
+
+### One-shot deployment and review
+
+If you already have a mounted image tree such as `~/Documents/TESTIMG`, run:
+
+```bash
+python tools/deploy-image.py --image-root ~/Documents/TESTIMG
+```
+
+This runs Phase 1 setup, installs the launcher into the image, scans the game
+tree, and then starts the local Phase 2 metadata review UI against the
+generated `SETUP-REVIEW.json`.
+
+Use `--no-browser` if you want to open the UI yourself, or `--setup-only` if
+you want Phase 1 only.
+
 ### 3. Get sample games (recommended first run)
 
 Games are **not** in git (copyright and size). Fetch a free/shareware pack:
 
 ```bash
-python3 tools/fetch-samples.py --list
-python3 tools/fetch-samples.py              # download + seed GAME.TXT
-python3 tools/scan-games.py                 # write booth/GAMES.LST
+python tools/fetch-samples.py --list
+python tools/fetch-samples.py               # download + seed GAME.TXT
+python tools/scan-games.py                  # write booth/GAMES.LST
 ```
 
 Or drop your own game folders into `booth/GAMES/<8CHARDIR>/` and run `scan-games.py`.
 
 ### 4. Test in DOSBox
 
+Linux/macOS:
+
 ```bash
 ./tools/run.sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1
 ```
 
 Controls in the browser:
@@ -92,6 +132,74 @@ Controls in the browser:
 
 ---
 
+## First-time mounted image setup (Phase 1)
+
+If you already have a mounted DOS image with installed games, you can bootstrap
+the launcher directly on that image:
+
+```bash
+python tools/setup-image.py --image-root /path/to/mounted/image
+```
+
+Useful options:
+
+```bash
+python tools/setup-image.py --image-root /mnt/dos --scan-root GAMES --launcher-path C:\\DGB
+python tools/setup-image.py --image-root /mnt/dos --dry-run --verbose
+python tools/setup-image.py --image-root /mnt/dos --on-conflict overwrite
+```
+
+Notes:
+
+- Scanning is recursive under `--scan-root`.
+- `--scan-root` is treated as the GAMES root used for generated `GAMES.LST` paths.
+- When multiple launch files exist in one directory, selection order is:
+  `.BAT`, then `.EXE`, then `.COM`.
+- The setup writes `GAMES.LST` and `SETUP-REVIEW.json` under the launcher path.
+- Existing launcher files are protected by default (`--on-conflict fail`). Use
+  `--on-conflict skip` or `--on-conflict overwrite` if needed.
+- Run `bash tools/test-setup-image.sh` (or PowerShell
+  `.\tools\test-setup-image.ps1`) to validate setup conflict and path mapping
+  behavior after tool changes.
+- Run `bash tools/test-setup-image-all.sh` to execute bash checks and, when
+  available, the PowerShell checks in one pass.
+
+Detailed guide: [docs/SETUP-IMAGE.md](docs/SETUP-IMAGE.md)
+
+## Phase 2 metadata UI (MVP)
+
+After `setup-image.py` creates `SETUP-REVIEW.json`, launch the local metadata
+editor:
+
+```bash
+python tools/metadata-ui.py --launcher-dir /path/to/launcher-dir
+```
+
+You can also point directly at the review file:
+
+```bash
+python tools/metadata-ui.py --review-file /path/to/SETUP-REVIEW.json
+```
+
+Use the UI save action to update `GAME.TXT`, then click `Regenerate GAMES.LST`
+to rebuild the launcher index from the same scan root.
+
+Use `Bulk Apply to Filtered Unresolved` to stamp shared fields (year,
+publisher, genre) across unresolved records currently visible in the filter.
+
+Review shortcuts:
+
+- `Ctrl+S` save current record
+- `[` previous record, `]` next record
+- `N` jump to next unresolved record in current filter
+
+Regression checks:
+
+```bash
+bash tools/test-metadata-ui.sh
+bash tools/test-metadata-ui-all.sh
+```
+
 ## Autogenerating the launcher config
 
 The browser does **not** scan directories at runtime. It only reads `GAMES.LST`.
@@ -103,10 +211,10 @@ The browser does **not** scan directories at runtime. It only reads `GAMES.LST`.
 3. Run the scanner — it picks a launch executable if `exe=` is missing, seeds incomplete `GAME.TXT`, and writes the index:
 
 ```bash
-python3 tools/scan-games.py
-python3 tools/scan-games.py --sort year
-python3 tools/scan-games.py --sort title --no-headers
-python3 tools/scan-games.py --apply-catalog   # fill gaps from sample-catalog.json
+python tools/scan-games.py
+python tools/scan-games.py --sort year
+python tools/scan-games.py --sort title --no-headers
+python tools/scan-games.py --apply-catalog   # fill gaps from sample-catalog.json
 ```
 
 See [docs/FORMAT.md](docs/FORMAT.md) for field definitions and [docs/HARDWARE.md](docs/HARDWARE.md) for CF/real-hardware notes.
@@ -189,12 +297,14 @@ Or run `START.BAT` manually. `START.BAT` loads `ABORT.COM` once, then loops `BRO
 
 1. Create `booth/GAMES/MYGAME/` (max 8 characters recommended for pure DOS).
 2. Copy the game files in.
-3. `python3 tools/scan-games.py` — this scans the image, discovers launch files, and writes or refreshes `GAME.TXT` and `GAMES.LST`.
+3. `python tools/scan-games.py` — this scans the image, discovers launch files, and writes or refreshes `GAME.TXT` and `GAMES.LST`.
 4. Review the generated `GAME.TXT` files and hand-edit title, year, genre, publisher, exe, and note where needed.
-5. Re-run `python3 tools/scan-games.py` after edits.
+5. Re-run `python tools/scan-games.py` after edits.
 6. `./tools/make-media.sh` and recopy to the CF card or mounted image.
 
 If a game lives in a subfolder (`GAMES\COMMANDE\KEEN\KEEN1.EXE`), the scanner records `dir=COMMANDE\KEEN` so the working directory is correct at launch.
+
+The scanner considers DOS launch files with `.EXE`, `.COM`, and `.BAT` extensions.
 
 If you want to speed up metadata cleanup, you can use an AI assistant with a prompt like this after scanning:
 

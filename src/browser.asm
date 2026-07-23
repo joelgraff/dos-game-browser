@@ -982,7 +982,7 @@ reinit_after_game:
         mov     dl, [sdrv]
         int     21h
         mov     ah, 3Bh
-        mov     dx, root_slash
+        mov     dx, scwd
         int     21h
 
         call    kbd_recover
@@ -1407,6 +1407,34 @@ launch:
         mov     si, scwd
         int     21h
 
+        ; AH=47h returns path without leading '\'. Convert to absolute
+        ; so we can always restore the launcher directory reliably.
+        mov     si, scwd
+        cmp     byte [si], 0
+        je      .cwd_root
+        mov     di, si
+.cwd_find_end:
+        cmp     byte [di], 0
+        je      .cwd_shift
+        inc     di
+        jmp     .cwd_find_end
+.cwd_shift:
+        mov     bx, di
+.cwd_shift_loop:
+        mov     al, [bx]
+        mov     [bx+1], al
+        cmp     bx, si
+        je      .cwd_pref
+        dec     bx
+        jmp     .cwd_shift_loop
+.cwd_pref:
+        mov     byte [si], '\'
+        jmp     .cwd_done
+.cwd_root:
+        mov     byte [si], '\'
+        mov     byte [si+1], 0
+.cwd_done:
+
         mov     ax, [cur]
         mov     cx, ENT_SIZE
         mul     cx
@@ -1423,10 +1451,28 @@ launch:
         xor     al, al
         stosb
 
+        ; Build absolute game directory from launcher CWD as fallback.
+        mov     di, apath
+        mov     si, scwd
+        call    cpy
+        mov     si, pfx_abs
+        call    cpy
+        mov     si, [ent_ptr]
+        add     si, OFF_DIR
+        call    cpy
+        xor     al, al
+        stosb
+
         mov     ah, 3Bh
         mov     dx, path
         int     21h
+        jnc     .cd_ok
+
+        mov     ah, 3Bh
+        mov     dx, apath
+        int     21h
         jc      .err_cd
+.cd_ok:
 
         mov     si, [ent_ptr]
         add     si, OFF_EXE
@@ -1445,6 +1491,17 @@ launch:
         call    cpy
         mov     si, [ent_ptr]
         add     si, OFF_DIR
+        call    cpy
+        mov     al, '\'
+        stosb
+        mov     si, [ent_ptr]
+        add     si, OFF_EXE
+        call    cpy
+        xor     al, al
+        stosb
+
+        mov     di, afull
+        mov     si, apath
         call    cpy
         mov     al, '\'
         stosb
@@ -1484,27 +1541,8 @@ launch:
         int     21h
         jnc     .ok_exec
 
-        mov     ax, cs
-        mov     ds, ax
-        mov     es, ax
-        mov     ah, 3Bh
-        mov     dx, root_slash
-        int     21h
-        mov     ah, 3Bh
-        mov     dx, path
-        int     21h
-
         mov     ax, 4B00h
-        mov     dx, ename
-        mov     bx, epb
-        int     21h
-        jnc     .ok_exec
-
-        mov     ah, 3Bh
-        mov     dx, root_slash
-        int     21h
-        mov     ax, 4B00h
-        mov     dx, fullpath
+        mov     dx, afull
         mov     bx, epb
         int     21h
         jnc     .ok_exec
@@ -1548,7 +1586,7 @@ launch:
         mov     dh, 14
         mov     dl, 2
         mov     bl, [attr_dim]
-        mov     si, fullpath
+        mov     si, afull
         call    vputs
         mov     ah, 00h
         int     16h
@@ -1567,7 +1605,7 @@ launch:
         mov     dh, 13
         mov     dl, 2
         mov     bl, [attr_dim]
-        mov     si, path
+        mov     si, apath
         call    vputs
         mov     ah, 00h
         int     16h
@@ -1603,6 +1641,7 @@ stack_top:
 fname           db 'GAMES.LST',0
 fname2          db 'C:\GAMES.LST',0
 pfx             db 'GAMES\',0
+pfx_abs         db '\GAMES\',0
 root_slash      db '\',0
 fh              dw 0
 file_len        dw 0
@@ -1633,8 +1672,10 @@ vec16           dd 0
 vec1C           dd 0
 vec28           dd 0
 scwd            times 64 db 0
-path            times 80 db 0
+path            times 96 db 0
+apath           times 128 db 0
 fullpath        times 96 db 0
+afull           times 160 db 0
 ename           times 14 db 0
 etail           db 0, 13
 outbuf          times 90 db 0
