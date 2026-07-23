@@ -18,15 +18,24 @@ Never rely on long filenames, Unicode, or a network stack on the target.
 - Physical HDD / SSD with a DOS-compatible controller  
 - For tiny demos: 1.44 MB floppy (launcher + a few small games)
 
-Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Install a bootable MS-DOS (or FreeDOS) system first, then copy the booth tree.
+Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Install a bootable MS-DOS (or FreeDOS) system first, then copy the booth tree into its own launcher directory, such as `C:\DGB\`.
 
 ## Copy checklist
 
 1. On the host: `python3 tools/scan-games.py` then `./tools/make-media.sh`
 2. Mount the CF/USB volume on the host (or use a USB card reader)
-3. Copy **contents** of `media/booth/` to `C:\` (or e.g. `C:\GAMESYS\`)
-4. Edit target `AUTOEXEC.BAT` to `CALL C:\START.BAT` if you want kiosk auto-start
+3. Copy **contents** of `media/booth/` to a dedicated launcher directory, such as `C:\DGB\`
+4. Edit target `AUTOEXEC.BAT` to `CALL C:\DGB\START.BAT` if you want kiosk auto-start
 5. Safely eject, insert in the target, boot
+
+If you already have an MS-DOS image with games on it:
+
+1. Mount the image on the host system.
+2. Copy the launcher tree into its own directory inside the image, such as `C:\DGB\`.
+3. Place your game folders under `C:\DGB\GAMES\`.
+4. Run `python3 tools/scan-games.py` from the host after the games are copied in.
+5. Review and hand-edit the generated `GAME.TXT` files where the scanner could not infer correct metadata.
+6. Re-run the scanner, then stage the image again.
 
 If the booth is not at `C:\`, either:
 

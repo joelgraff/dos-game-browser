@@ -119,45 +119,21 @@ int2f:
 ;------------------------------------------------------------------------------
 int09:
         push    ax
-        push    ds
-
-        ; Read scancode from 60h (before BIOS eats it) — chain first is safer
-        ; for full keyboard processing; we peek port 60h then chain.
-        in      al, 60h
-        cmp     al, SC_BACKSPACE
-        jne     .chain
-
-        ; Check Ctrl+Alt in BIOS shift flags
         push    bx
-        mov     ax, 40h
-        mov     ds, ax
-        mov     al, [17h]
+        push    cx
+        push    dx
+        push    ds
+        pushf
+        call    far [cs:old09]
+
+        call    maybe_request_abort
+
+        pop     ds
+        pop     dx
+        pop     cx
         pop     bx
-        and     al, KF_CTRL | KF_ALT
-        cmp     al, KF_CTRL | KF_ALT
-        jne     .chain
-
-        ; Hotkey hit — swallow key: EOI + discard, request abort
-        in      al, 61h
-        mov     ah, al
-        or      al, 80h
-        out     61h, al
-        mov     al, ah
-        out     61h, al
-        mov     al, 20h
-        out     20h, al
-
-        mov     byte [cs:pending], 1
-        call    try_abort
-
-        pop     ds
         pop     ax
-        iret                            ; do not chain (swallow backspace)
-
-.chain:
-        pop     ds
-        pop     ax
-        jmp     far [cs:old09]
+        iret
 
 ;------------------------------------------------------------------------------
 ; INT 28h — DOS idle; retry pending abort
@@ -168,6 +144,46 @@ int28:
         call    try_abort
 .chain:
         jmp     far [cs:old28]
+
+;------------------------------------------------------------------------------
+; maybe_request_abort — after BIOS keyboard handling, detect Ctrl+Alt+Backspace
+; in the BIOS buffer and request an abort without touching port 60h.
+;------------------------------------------------------------------------------
+maybe_request_abort:
+        push    ax
+        push    bx
+        push    cx
+        push    ds
+
+        mov     ax, 40h
+        mov     ds, ax
+
+        mov     al, [17h]
+        and     al, KF_CTRL | KF_ALT
+        cmp     al, KF_CTRL | KF_ALT
+        jne     .out
+
+        mov     bx, [1Ch]               ; tail pointer after BIOS advanced it
+        cmp     bx, [1Ah]
+        je      .out                    ; no new keystroke buffered
+
+        cmp     bx, 1Eh
+        jne     .prev_ok
+        mov     bx, 3Eh
+.prev_ok:
+        sub     bx, 2
+        cmp     word [bx], 0E08h        ; Backspace = scan 0Eh, ASCII 08h
+        jne     .out
+
+        mov     [1Ch], bx               ; swallow the buffered backspace
+        mov     byte [cs:pending], 1
+
+.out:
+        pop     ds
+        pop     cx
+        pop     bx
+        pop     ax
+        ret
 
 ;------------------------------------------------------------------------------
 ; try_abort — if pending and DOS free, terminate current process

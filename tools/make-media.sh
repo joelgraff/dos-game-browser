@@ -102,8 +102,8 @@ cat <<EOF
 
 Next steps (real hardware):
   1. Format CF/HDD with FAT16 (or FAT12 for floppies); install MS-DOS 5/6 if needed.
-  2. Copy contents of media/booth\\ to C:\\ (or a folder on C:).
-  3. Optional auto-start: add C:\\START.BAT to AUTOEXEC.BAT
+  2. Copy contents of media/booth\ to a dedicated launcher directory such as C:\DGB\.
+  3. Optional auto-start: add C:\DGB\START.BAT to AUTOEXEC.BAT
   4. Boot the machine; Ctrl+Alt+Backspace force-exits a hung game.
 
 DOSBox (host test):  tools/run.sh
