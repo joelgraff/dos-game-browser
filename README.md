@@ -33,8 +33,8 @@ dos-game-browser/
     GAMES/               your games (gitignored)
     UTILS/ABORT.COM
     UTILS/VDETECT.COM
-  src/                   NASM sources
-  tools/                 build, run, scan, fetch, media
+  src/                   NASM sources (browser.asm, abort.asm, vdetect.asm)
+  tools/                 build, scan, setup, review UI, media, tests
   docs/FORMAT.md         GAME.TXT / GAMES.LST format
   config/dosbox.conf     reference DOSBox conf
 ```
@@ -101,24 +101,39 @@ Games are **not** in git (copyright and size). Fetch a free/shareware pack:
 ```bash
 python tools/fetch-samples.py --list
 python tools/fetch-samples.py               # download + seed GAME.TXT
-python tools/scan-games.py                  # write booth/GAMES.LST
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth   # write booth/GAMES.LST
 ```
 
-Or drop your own game folders into `booth/GAMES/<8CHARDIR>/` and run `scan-games.py`.
+Or drop your own game folders into `booth/GAMES/<8CHARDIR>/` and re-run the scanner.
 
 ### 4. Test in DOSBox
 
 Linux/macOS:
 
 ```bash
-./tools/run.sh
+python tools/launch-dosbox.py
 ```
 
 Windows (PowerShell):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\run.ps1
+python .\tools\launch-dosbox.py
 ```
+
+To test a mounted image like `Documents/TESTIMG` where DGB is under `C:\DGB`:
+
+```bash
+python tools/launch-dosbox.py --image-root ~/Documents/TESTIMG --launcher-dir DGB
+```
+
+Optional local default override (kept out of git):
+
+```bash
+python tools/launch-dosbox.py --image-root ~/Documents/TESTIMG --launcher-dir DGB --save-local
+python tools/launch-dosbox.py
+```
+
+This writes `tools/launch-dosbox.local.json` in your local clone only.
 
 Controls in the browser:
 
@@ -128,7 +143,23 @@ Controls in the browser:
 | Enter | Launch game |
 | A–Z | Jump to title |
 | Esc | Quit browser |
+| Ctrl+Alt+Esc | Maintenance exit — leaves the `START.BAT` loop (ERRORLEVEL 42) |
 | **Ctrl+Alt+Backspace** | Force-exit running game (ABORT TSR) |
+
+### Diagnosing path problems on the target machine
+
+`BROWSER.COM` has a self-test mode that runs the real config and index parsing
+and prints what it resolved, which is the fastest way to see why a game will not
+start on real hardware:
+
+```bat
+C:\DGB> BROWSER.COM /T > TEST.TXT
+```
+
+It reports whether `DGB.CFG` was found, the resolved games-root prefixes, the
+entry count, and every parsed entry with the record re-read from disk. The same
+hook drives the automated tests (`bash tools/test-browser.sh`), so what you see
+on hardware is what CI checks.
 
 ---
 
@@ -151,11 +182,20 @@ python tools/setup-image.py --image-root /mnt/dos --on-conflict overwrite
 
 Notes:
 
-- Scanning is recursive under `--scan-root`.
-- `--scan-root` is treated as the GAMES root used for generated `GAMES.LST` paths.
+- `setup-image.py` installs the launcher files, then calls `tools/scan-games.py`
+  for discovery and index generation. There is only one scanner.
+- `--scan-root` is the games root used for generated `GAMES.LST` paths.
+- Game directories may sit **1 to 3 levels** below the games root, so
+  `<root>/GAME/`, `<root>/PUBLISHER/GAME/` and `<root>/PUBLISHER/SERIES/GAME/`
+  all work. A directory holding a launchable file *is* a game and is not
+  descended into, so a game's own `UTILS\` or `DATA\` subfolders never turn into
+  extra catalog entries.
 - When multiple launch files exist in one directory, selection order is:
   `.BAT`, then `.EXE`, then `.COM`.
 - The setup writes `GAMES.LST` and `SETUP-REVIEW.json` under the launcher path.
+- The setup writes `DGB.CFG` under the launcher path, with `GAMES_ROOT` derived
+  from `--image-root`. The DOS games root is never inferred from host directory
+  nesting — pass `--games-root-dos` to `scan-games.py` to state it outright.
 - Existing launcher files are protected by default (`--on-conflict fail`). Use
   `--on-conflict skip` or `--on-conflict overwrite` if needed.
 - Run `bash tools/test-setup-image.sh` (or PowerShell
@@ -200,6 +240,29 @@ bash tools/test-metadata-ui.sh
 bash tools/test-metadata-ui-all.sh
 ```
 
+## Regression tests
+
+| Script | Covers |
+|--------|--------|
+| `tools/test-browser.sh` | `BROWSER.COM` itself, under headless DOSBox |
+| `tools/test-scan-games.sh` | Scanner: discovery depth, `DGB.CFG`, capacity guards |
+| `tools/test-setup-image.sh` | Launcher install and conflict policy |
+| `tools/test-metadata-ui.sh` | Phase 2 review UI endpoints |
+
+`tools/test-browser.sh` assembles `src/browser.asm` and runs it under headless
+DOSBox against fixture trees, asserting on the `/T` self-test output. It covers
+`DGB.CFG` parsing, index parsing and offsets, catalogs past the old 64-entry
+ceiling, and two end-to-end launches that verify a child process actually starts
+in the correct game directory.
+
+```bash
+bash tools/test-browser.sh
+bash tools/test-browser.sh -k cfg    # only cases matching "cfg"
+bash tools/test-scan-games.sh
+```
+
+`test-browser.sh` requires `nasm` and `dosbox` (`sudo apt install nasm dosbox`).
+
 ## Autogenerating the launcher config
 
 The browser does **not** scan directories at runtime. It only reads `GAMES.LST`.
@@ -211,10 +274,10 @@ The browser does **not** scan directories at runtime. It only reads `GAMES.LST`.
 3. Run the scanner — it picks a launch executable if `exe=` is missing, seeds incomplete `GAME.TXT`, and writes the index:
 
 ```bash
-python tools/scan-games.py
-python tools/scan-games.py --sort year
-python tools/scan-games.py --sort title --no-headers
-python tools/scan-games.py --apply-catalog   # fill gaps from sample-catalog.json
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --sort year
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --sort title --no-headers
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --apply-catalog
 ```
 
 See [docs/FORMAT.md](docs/FORMAT.md) for field definitions and [docs/HARDWARE.md](docs/HARDWARE.md) for CF/real-hardware notes.
@@ -297,9 +360,13 @@ Or run `START.BAT` manually. `START.BAT` loads `ABORT.COM` once, then loops `BRO
 
 1. Create `booth/GAMES/MYGAME/` (max 8 characters recommended for pure DOS).
 2. Copy the game files in.
-3. `python tools/scan-games.py` — this scans the image, discovers launch files, and writes or refreshes `GAME.TXT` and `GAMES.LST`.
+3. Run the scanner — it discovers launch files and writes or refreshes `GAME.TXT` and `GAMES.LST`:
+
+   ```bash
+   python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
+   ```
 4. Review the generated `GAME.TXT` files and hand-edit title, year, genre, publisher, exe, and note where needed.
-5. Re-run `python tools/scan-games.py` after edits.
+5. Re-run the scanner after edits.
 6. `./tools/make-media.sh` and recopy to the CF card or mounted image.
 
 If a game lives in a subfolder (`GAMES\COMMANDE\KEEN\KEEN1.EXE`), the scanner records `dir=COMMANDE\KEEN` so the working directory is correct at launch.

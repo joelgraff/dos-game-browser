@@ -10,7 +10,7 @@ Usage:
     python tools/fetch-samples.py --list
     python tools/fetch-samples.py --only HELLOWOR SOPWITH1
     python tools/fetch-samples.py --seed-only   # write GAME.TXT stubs only
-    python tools/scan-games.py                  # after fetch: rebuild GAMES.LST
+    python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth   # after fetch
 """
 from __future__ import annotations
 
@@ -289,7 +289,7 @@ def main() -> int:
             fail += 1
 
     print(f"\nDone: {ok} ok, {fail} failed → {GAMES}")
-    print("Next: python tools/scan-games.py")
+    print("Next: python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth")
     return 0 if fail == 0 else 1
 
 

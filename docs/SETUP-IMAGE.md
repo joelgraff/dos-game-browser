@@ -6,7 +6,11 @@ mounted DOS image that already contains games.
 ## Goals
 
 - Install launcher artifacts into a target DOS directory (for example `C:\DGB`).
-- Scan a game tree recursively for launchable files.
+- Scan a game tree for launchable files (via `tools/scan-games.py`, the
+  project's only scanner). Game directories may sit 1 to 3 levels below the
+  games root; a directory holding a launchable file is treated as a game and
+  is not descended into, so its own `UTILS\`/`DATA\` subfolders do not become
+  extra entries.
 - Generate `GAMES.LST` and placeholder `GAME.TXT` metadata.
 - Produce `SETUP-REVIEW.json` for post-scan metadata cleanup.
 
@@ -106,6 +110,8 @@ Written under launcher target directory unless `--dry-run`:
 
 - `GAMES.LST`
 - `SETUP-REVIEW.json`
+- `DGB.CFG` (runtime root-path config; `GAMES_ROOT` is derived from
+  `--image-root`, never guessed from host directory nesting)
 - copied launcher files (`BROWSER.COM`, `START.BAT`, `UTILS/*`)
 
 Also writes or updates per-folder `GAME.TXT` placeholders under scanned game
@@ -116,7 +122,8 @@ folders when metadata is missing.
 1. Run setup with `--dry-run --verbose` first.
 2. Run real setup with chosen conflict policy.
 3. Review generated `SETUP-REVIEW.json` and each `GAME.TXT`.
-4. Re-run setup or `tools/scan-games.py` after metadata edits.
+4. Re-run `tools/scan-games.py` after metadata edits (see the README for the
+   required `--games-root` / `--launcher-dir` arguments).
 5. Boot image and run `START.BAT` from launcher directory.
 
 ## Phase 2 metadata web UI (MVP)

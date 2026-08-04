@@ -197,4 +197,48 @@ if ! grep -Fq '"needs_review": false' "$tmpdir/DGB/SETUP-REVIEW.json"; then
   exit 1
 fi
 
+echo "[8/9] refuse cross-origin writes"
+code=$(curl -s -o "$tmpdir/xorigin.json" -w '%{http_code}' \
+  -X POST "http://127.0.0.1:$PORT/api/regenerate" \
+  -H 'Origin: http://evil.example')
+if [[ "$code" != "403" ]]; then
+  echo "ASSERT FAIL: cross-origin POST should be refused, got HTTP $code" >&2
+  cat "$tmpdir/xorigin.json" >&2
+  exit 1
+fi
+# a matching Origin is still accepted
+code=$(curl -s -o /dev/null -w '%{http_code}' \
+  -X POST "http://127.0.0.1:$PORT/api/regenerate" \
+  -H "Origin: http://127.0.0.1:$PORT")
+if [[ "$code" != "200" ]]; then
+  echo "ASSERT FAIL: same-origin POST should be accepted, got HTTP $code" >&2
+  exit 1
+fi
+
+echo "[9/9] bulk update is atomic when a later record is bad"
+# ALPHA (index 0) is valid; remove BETA's directory so record 1 fails the
+# is_dir() check. Writing as we go used to leave ALPHA's GAME.TXT modified
+# while save_review() never ran.
+cp "$tmpdir/GAMES/ALPHA/GAME.TXT" "$tmpdir/alpha.before"
+rm -rf "$tmpdir/GAMES/BETA"
+code=$(curl -s -o "$tmpdir/atomic.json" -w '%{http_code}' \
+  -X POST "http://127.0.0.1:$PORT/api/bulk-update" \
+  -H 'Content-Type: application/json' \
+  -d '{"ids":[0,1],"patch":{"publisher":"SHOULD-NOT-LAND"}}')
+if [[ "$code" == "200" ]]; then
+  echo "ASSERT FAIL: bulk update with a missing game dir should not succeed" >&2
+  cat "$tmpdir/atomic.json" >&2
+  exit 1
+fi
+if grep -Fq 'SHOULD-NOT-LAND' "$tmpdir/GAMES/ALPHA/GAME.TXT"; then
+  echo "ASSERT FAIL: partial bulk write landed on disk" >&2
+  cat "$tmpdir/GAMES/ALPHA/GAME.TXT" >&2
+  exit 1
+fi
+if ! diff -q "$tmpdir/alpha.before" "$tmpdir/GAMES/ALPHA/GAME.TXT" >/dev/null; then
+  echo "ASSERT FAIL: GAME.TXT changed despite a failed bulk update" >&2
+  diff "$tmpdir/alpha.before" "$tmpdir/GAMES/ALPHA/GAME.TXT" >&2
+  exit 1
+fi
+
 echo "metadata-ui smoke tests passed"

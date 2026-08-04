@@ -22,7 +22,7 @@ Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Inst
 
 ## Copy checklist
 
-1. On the host: `python tools/scan-games.py` then `./tools/make-media.sh`
+1. On the host: run the scanner (see README), then `./tools/make-media.sh`
 2. Mount the CF/USB volume on the host (or use a USB card reader)
 3. Copy **contents** of `media/booth/` to a dedicated launcher directory, such as `C:\DGB\`
 4. Edit target `AUTOEXEC.BAT` to `CALL C:\DGB\START.BAT` if you want kiosk auto-start
@@ -33,7 +33,7 @@ If you already have an MS-DOS image with games on it:
 1. Mount the image on the host system.
 2. Copy the launcher tree into its own directory inside the image, such as `C:\DGB\`.
 3. Place your game folders under `C:\DGB\GAMES\`.
-4. Run `python tools/scan-games.py` from the host after the games are copied in.
+4. Re-run the scanner from the host after the games are copied in.
 5. Review and hand-edit the generated `GAME.TXT` files where the scanner could not infer correct metadata.
 6. Re-run the scanner, then stage the image again.
 
@@ -42,7 +42,7 @@ If the booth is not at `C:\`, either:
 - `CD` to that directory before `BROWSER.COM`, or  
 - Keep `GAMES.LST` next to `BROWSER.COM` (the browser also tries `C:\GAMES.LST`)
 
-Game paths inside `GAMES.LST` are relative to a `GAMES\` directory beside the browser when you use the default layout from `scan-games.py` (`dir` field under `GAMES\`).
+Game paths inside `GAMES.LST` are relative to the games root recorded in `DGB.CFG` (`GAMES_ROOT`). With the default booth layout that is a `GAMES\` directory beside the browser.
 
 ## Memory and TSRs
 
@@ -65,8 +65,8 @@ Not every protected-mode or DPMI title will unwind cleanly; still better than a 
 ```bash
 ./tools/build.sh
 python tools/fetch-samples.py --only HELLOWOR
-python tools/scan-games.py
-./tools/run.sh
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
+python tools/launch-dosbox.py
 ```
 
 Confirm menu navigation and that Enter launches the hello-world stub, then stage media.

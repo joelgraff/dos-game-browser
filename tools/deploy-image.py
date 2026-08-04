@@ -126,6 +126,10 @@ def main() -> int:
     if rc != 0:
         return rc
 
+    if args.setup_only:
+        print("Phase 1 completed; --setup-only requested, so the review UI was not started.")
+        return 0
+
     if args.dry_run or args.no_scan:
         print("Phase 1 completed; UI launch skipped because no review file was generated.")
         return 0
@@ -145,9 +149,10 @@ def main() -> int:
         args.host,
         "--port",
         str(args.port),
+        # This script owns opening the browser, once the server is confirmed
+        # ready; letting the child open one too produced two tabs.
+        "--no-browser",
     ]
-    if args.no_browser:
-        ui_cmd.append("--no-browser")
 
     ui_url = f"http://{args.host}:{args.port}/"
     print("\nStarting Phase 2 review UI...")

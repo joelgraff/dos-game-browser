@@ -103,8 +103,10 @@ def write_game_txt(game_dir: Path, record: dict[str, Any]) -> None:
     for key in FIELDS:
         if meta[key] != "":
             lines.append(f"{key}={meta[key]}")
-    text = "\n".join(lines) + "\n"
-    (game_dir / "GAME.TXT").write_text(text, encoding="utf-8")
+    # CRLF/ASCII to match tools/scan-games.py — the same file is read and
+    # rewritten by both, and edited with DOS EDIT on the target machine.
+    text = "\r\n".join(lines) + "\r\n"
+    (game_dir / "GAME.TXT").write_text(text, encoding="ascii", errors="replace")
 
 
 def compute_needs_review(record: dict[str, Any]) -> bool:
@@ -170,11 +172,20 @@ class MetadataApp:
         cmd = [
             sys.executable,
             str(Path(__file__).resolve().parents[1] / "tools" / "scan-games.py"),
-            "--games",
+            "--games-root",
             str(self.scan_root),
+            "--launcher-dir",
+            str(self.launcher_dir),
             "--out",
             str(out_lst),
         ]
+        # Carry the DOS games root through so regenerating cannot leave a stale
+        # or missing DGB.CFG behind.
+        games_root_dos = str(self.payload.get("games_root_dos") or "")
+        if games_root_dos:
+            cmd.extend(["--games-root-dos", games_root_dos])
+        else:
+            cmd.append("--no-cfg")
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout).strip()
@@ -225,14 +236,21 @@ class MetadataApp:
                 clean_ids.append(idx)
 
             unique_ids = sorted(set(clean_ids))
-            updated: list[int] = []
+
+            # Validate every target first. Writing as we go meant a bad record
+            # part-way through left earlier GAME.TXT files written while
+            # save_review() never ran, desynchronizing the review file on disk.
+            planned: list[tuple[int, dict[str, Any], Path]] = []
             for idx in unique_ids:
                 rec = self.records[idx]
                 game_dir = Path(rec["dir"])
                 if not game_dir.is_dir():
                     raise FileNotFoundError(f"game directory not found: {game_dir}")
+                planned.append((idx, self._build_updates(rec, patch), game_dir))
 
-                updates = self._build_updates(rec, patch)
+            updated: list[int] = []
+            for idx, updates, game_dir in planned:
+                rec = self.records[idx]
                 rec.update(updates)
                 rec["needs_review"] = compute_needs_review(rec)
                 write_game_txt(game_dir, rec)
@@ -272,72 +290,108 @@ def make_handler(app: MetadataApp):
                 return
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
+        def _same_origin(self) -> bool:
+            """
+            Reject cross-origin writes. This server binds loopback by default,
+            but any page open in the user's browser could otherwise POST to it
+            while it runs. Requests with no Origin (curl, the test harness) are
+            not browser-driven and are allowed.
+            """
+            origin = self.headers.get("Origin")
+            if not origin:
+                return True
+            host = self.headers.get("Host", "")
+            return origin in (f"http://{host}", f"https://{host}")
+
+        def _read_json_body(self) -> Any:
+            """Parse a JSON request body, or raise ValueError."""
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
+            if ctype and ctype != "application/json":
+                raise ValueError("expected application/json")
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                raise ValueError("invalid content length")
+            raw = self.rfile.read(length) if length > 0 else b""
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise ValueError("invalid json")
+
         def do_POST(self) -> None:
-          if self.path == "/api/regenerate":
-            try:
-              result = app.regenerate_index()
-              self._json(HTTPStatus.OK, {"ok": True, **result})
-            except (RuntimeError, ValueError) as exc:
-              self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-            return
+            if not self._same_origin():
+                self._json(HTTPStatus.FORBIDDEN, {"error": "cross-origin request refused"})
+                return
 
-          if self.path == "/api/bulk-update":
-            length = int(self.headers.get("Content-Length", "0"))
-            raw = self.rfile.read(length)
-            try:
-              payload = json.loads(raw.decode("utf-8")) if raw else {}
-            except json.JSONDecodeError:
-              self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
-              return
+            if self.path == "/api/regenerate":
+                try:
+                    result = app.regenerate_index()
+                    self._json(HTTPStatus.OK, {"ok": True, **result})
+                except (RuntimeError, ValueError) as exc:
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
 
-            ids = payload.get("ids")
-            patch = payload.get("patch", {})
-            if not isinstance(ids, list):
-              self._json(HTTPStatus.BAD_REQUEST, {"error": "ids must be an array"})
-              return
+            if self.path == "/api/bulk-update":
+                try:
+                    payload = self._read_json_body()
+                except ValueError as exc:
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                    return
+                if not isinstance(payload, dict):
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": "expected a json object"})
+                    return
+
+                ids = payload.get("ids")
+                patch = payload.get("patch", {})
+                if not isinstance(ids, list):
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": "ids must be an array"})
+                    return
+                if not isinstance(patch, dict):
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": "patch must be an object"})
+                    return
+
+                try:
+                    result = app.bulk_update(ids, patch)
+                    self._json(HTTPStatus.OK, {"ok": True, **result})
+                except IndexError as exc:
+                    self._json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                except (ValueError, TypeError, FileNotFoundError) as exc:
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                except Exception as exc:  # noqa: BLE001
+                    self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"internal error: {exc}"})
+                return
+
+            if not self.path.startswith("/api/record/"):
+                self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+                return
+
+            try:
+                idx = int(self.path.rsplit("/", 1)[1])
+            except ValueError:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid record id"})
+                return
+
+            try:
+                patch = self._read_json_body()
+            except ValueError as exc:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
             if not isinstance(patch, dict):
-              self._json(HTTPStatus.BAD_REQUEST, {"error": "patch must be an object"})
-              return
+                self._json(HTTPStatus.BAD_REQUEST, {"error": "expected a json object"})
+                return
 
             try:
-              result = app.bulk_update(ids, patch)
-              self._json(HTTPStatus.OK, {"ok": True, **result})
+                rec = app.update_record(idx, patch)
+                self._json(HTTPStatus.OK, {"ok": True, "record": rec})
             except IndexError as exc:
-              self._json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                self._json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
             except (ValueError, FileNotFoundError) as exc:
-              self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-            except Exception as exc:
-              self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"internal error: {exc}"})
-            return
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except Exception as exc:  # noqa: BLE001
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"internal error: {exc}"})
 
-          if not self.path.startswith("/api/record/"):
-            self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-            return
-
-          try:
-            idx_str = self.path.rsplit("/", 1)[1]
-            idx = int(idx_str)
-          except Exception:
-            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid record id"})
-            return
-
-          length = int(self.headers.get("Content-Length", "0"))
-          raw = self.rfile.read(length)
-          try:
-            patch = json.loads(raw.decode("utf-8")) if raw else {}
-          except json.JSONDecodeError:
-            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid json"})
-            return
-
-          try:
-            rec = app.update_record(idx, patch)
-            self._json(HTTPStatus.OK, {"ok": True, "record": rec})
-          except IndexError as exc:
-            self._json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
-          except (ValueError, FileNotFoundError) as exc:
-            self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-          except Exception as exc:
-            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"internal error: {exc}"})
 
     return Handler
 

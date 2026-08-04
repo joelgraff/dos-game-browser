@@ -59,9 +59,13 @@ if [[ -d "$ROOT/booth/GAMES" ]] && find "$ROOT/booth/GAMES" -type f \( \
     -iname 'GAME.TXT' -o -iname '*.exe' -o -iname '*.com' -o -iname '*.bat' \
   \) -print -quit | grep -q .; then
   echo "Refreshing GAMES.LST..."
-  $PYTHON_CMD "$ROOT/tools/scan-games.py"
+  $PYTHON_CMD "$ROOT/tools/scan-games.py" \
+    --games-root "$ROOT/booth/GAMES" \
+    --launcher-dir "$ROOT/booth" \
+    --games-root-dos 'GAMES'
 elif [[ ! -f "$ROOT/booth/GAMES.LST" ]]; then
-  echo "WARNING: no games indexed. Run: python tools/fetch-samples.py && python tools/scan-games.py" >&2
+  echo "WARNING: no games indexed. Run: python tools/fetch-samples.py && \
+python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth" >&2
   # Minimal empty-safe list so browser can at least start and show error? Prefer a stub.
   printf '# GAMES.LST - no games yet\r\n' > "$ROOT/booth/GAMES.LST"
 fi
@@ -133,5 +137,5 @@ Next steps (real hardware):
   3. Optional auto-start: add C:\DGB\START.BAT to AUTOEXEC.BAT
   4. Boot the machine; Ctrl+Alt+Backspace force-exits a hung game.
 
-DOSBox (host test):  tools/run.sh
+DOSBox (host test):  python tools/launch-dosbox.py
 EOF
