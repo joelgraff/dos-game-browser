@@ -1381,6 +1381,11 @@ reinit_after_game:
         mov     ds, ax
         mov     es, ax
 
+        ; Freeze the TSR's counters the instant the child returns, so a later
+        ; /T reading covers the game only and not the menu keys after it.
+        mov     ax, 0AB04h
+        int     2Fh
+
         ; Games often hook IRQs and never unhook if force-killed — restore ours
         call    restore_vectors
 

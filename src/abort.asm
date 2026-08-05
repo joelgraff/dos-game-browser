@@ -160,6 +160,7 @@ orig09          dd      0               ; handler present when we installed
 old08           dd      0               ; only used when the watchdog is on
 watchdog        db      0               ; 1 = /W given
 wd_grabs        dw      0               ; times the watchdog reclaimed INT 09h
+counting        db      1               ; gate so a reading can cover one game
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -180,8 +181,10 @@ int2f:
         je      .reset
         cmp     ax, 0AB02h              ; report what the handler has seen
         je      .diag
-        cmp     ax, 0AB03h              ; zero the counters
+        cmp     ax, 0AB03h              ; zero the counters, start counting
         je      .zero
+        cmp     ax, 0AB04h              ; stop counting
+        je      .stop
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
@@ -190,10 +193,15 @@ int2f:
         call    reset_kbd_chain
         mov     al, 0ABh
         iret
-.zero:
+.zero:                                  ; AB03h: reset and start counting
         mov     word [cs:sc_count], 0
         mov     byte [cs:sc_last], 0
         mov     word [cs:wd_grabs], 0
+        mov     byte [cs:counting], 1
+        mov     al, 0ABh
+        iret
+.stop:                                  ; AB04h: stop, so the reading is frozen
+        mov     byte [cs:counting], 0
         mov     al, 0ABh
         iret
 .diag:
@@ -228,8 +236,11 @@ int09:
 
         in      al, 60h
 
-        inc     word [cs:sc_count]      ; diagnostics (INT 2Fh AB02h)
+        cmp     byte [cs:counting], 0   ; diagnostics (INT 2Fh AB02h/03h/04h)
+        je      .nocount
+        inc     word [cs:sc_count]
         mov     [cs:sc_last], al
+.nocount:
 
         cmp     al, 1Dh                 ; Ctrl make
         jne     .nc1
@@ -326,7 +337,10 @@ int08:
         cmp     ax, int09
         je      .out
 .grab:
+        cmp     byte [cs:counting], 0
+        je      .grab_go
         inc     word [cs:wd_grabs]
+.grab_go:
         mov     [cs:old09], ax
         mov     [cs:old09+2], bx
         cli
