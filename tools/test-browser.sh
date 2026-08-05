@@ -579,6 +579,98 @@ if ! skip_case "abort-absent"; then
 fi
 
 # ---------------------------------------------------------------------------
+# The entry table is 11.5KB of the ~20KB the browser occupies and is idle while
+# a child runs, so it is handed back and rebuilt afterwards. Memory-hungry games
+# (Commander Keen reports "Out of memory! Try Unloading TSRs!") need it.
+# Measured under DOSBox: 612KB free without the hand-back, 624KB with it.
+# ---------------------------------------------------------------------------
+if ! skip_case "exec-memory"; then
+  echo "[exec-memory] the entry table is handed back to the child"
+  d="$WORK/exec-memory"; mkdir -p "$d/GAMES/MEMREP"
+  cat > "$WORK/memrep.asm" <<'ASM'
+        bits    16
+        cpu     8086
+        org     100h
+start:
+        mov     ah, 4Ah
+        mov     bx, 20h
+        int     21h
+        mov     ah, 48h
+        mov     bx, 0FFFFh
+        int     21h
+        mov     ax, bx
+        mov     cl, 6
+        shr     ax, cl
+        mov     di, buf
+        call    putdec
+        mov     byte [di], '$'
+        mov     dx, msg
+        mov     ah, 09h
+        int     21h
+        mov     dx, buf
+        mov     ah, 09h
+        int     21h
+        mov     dx, crlf
+        mov     ah, 09h
+        int     21h
+        mov     ax, 4C00h
+        int     21h
+putdec:
+        push    ax
+        push    bx
+        push    cx
+        push    dx
+        mov     bx, 10
+        xor     cx, cx
+.d1:    xor     dx, dx
+        div     bx
+        push    dx
+        inc     cx
+        or      ax, ax
+        jnz     .d1
+.d2:    pop     ax
+        add     al, '0'
+        mov     [di], al
+        inc     di
+        dec     cx
+        jnz     .d2
+        pop     dx
+        pop     cx
+        pop     bx
+        pop     ax
+        ret
+msg     db 'FREEKB=$'
+crlf    db 13,10,'$'
+buf     times 8 db 0
+ASM
+  "$NASM" -f bin -o "$d/GAMES/MEMREP/MEMREP.COM" "$WORK/memrep.asm"
+  printf '# t\r\nG|MEMREP|MEMREP.COM|Mem Report|1990|Test|x|n\r\n' > "$d/GAMES.LST"
+  cp "$BIN" "$d/BROWSER.COM"
+  cat > "$d/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $d
+c:
+BROWSER.COM /X > OUT.TXT
+exit
+EOF
+  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
+  freekb="$(grep -oE 'FREEKB=[0-9]+' <<<"$out" | cut -d= -f2 | head -1)"
+  if [[ -n "$freekb" && "$freekb" -ge 620 ]]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    FAILED_CASES+=("exec-memory: child saw ${freekb:-no} KB free, expected >= 620")
+    echo "  FAIL [exec-memory] child saw ${freekb:-no} KB free (expected >= 620)"
+    sed 's/^/  | /' <<<"$out"
+  fi
+  # and the table must be rebuilt afterwards -- this lookup needs its offset
+  expect exec-memory "$out" "XREC DIR=MEMREP EXE=MEMREP.COM"
+fi
+
+# ---------------------------------------------------------------------------
 # Case: missing GAMES.LST reports failure rather than hanging
 # ---------------------------------------------------------------------------
 if ! skip_case "lst-missing"; then

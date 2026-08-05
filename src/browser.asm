@@ -1394,6 +1394,20 @@ reinit_after_game:
         ; since lst_path may be relative.
         call    open_lst
 
+        ; The entry table was handed to the child; rebuild it from the index.
+        call    load_list
+        jc      .relist_failed
+        mov     ax, [n_ent]
+        or      ax, ax
+        jz      .relist_failed
+        dec     ax
+        cmp     [cur], ax               ; clamp in case the index shrank
+        jbe     .relisted
+        mov     [cur], ax
+        mov     word [scr], 0
+.relist_failed:
+.relisted:
+
         call    kbd_recover
         call    silence_audio           ; stop SB/OPL/speaker left running after abort
 
@@ -1777,6 +1791,30 @@ sb_dsp_wr:
 ;------------------------------------------------------------------------------
 ; Shrink our MCB so child programs have free conventional memory.
 ;------------------------------------------------------------------------------
+; Give the entry table back to the game. It is 11.5KB of the ~20KB we occupy
+; and is untouched while a child runs; load_list rebuilds it afterwards.
+; Memory-hungry games (Commander Keen reports "Out of memory! Try Unloading
+; TSRs!") need every kilobyte of conventional RAM we can return.
+shrink_for_exec:
+        push    ax
+        push    bx
+        push    cx
+        push    es
+        mov     ax, cs
+        mov     es, ax
+        mov     bx, resident_min
+        add     bx, 15
+        mov     cl, 4
+        shr     bx, cl
+        add     bx, 16
+        mov     ah, 4Ah
+        int     21h
+        pop     es
+        pop     cx
+        pop     bx
+        pop     ax
+        ret
+
 shrink_mem:
         push    ax
         push    bx
@@ -1850,6 +1888,9 @@ launch:
 
         ; The index handle must not be inherited by the child.
         call    close_lst
+
+        ; Hand the entry table back before the child loads.
+        call    shrink_for_exec
 
         mov     di, path                ; launcher-relative candidate
         mov     si, pfx
@@ -2514,6 +2555,9 @@ st_xnoreopen    db 'XREOPEN=FAIL',0
 st_xnone        db 'XNONE',0
 st_ch           db 0,0
 
+; Everything below here is idle while a child runs and is handed back to it.
+; Keep the entry table last so the block can simply be truncated.
+resident_min:
 entries         times MAX_ENT*ENT_SIZE db 0
 
         align   16

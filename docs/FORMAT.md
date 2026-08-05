@@ -92,6 +92,11 @@ and the scanners refuse to write an index that exceeds them, so the launcher can
 never silently truncate a catalog. Each category header also consumes a blank
 spacer slot, so `--no-headers` buys back roughly two slots per genre.
 
+While a game runs, the browser hands its entry table (11.5KB) back to DOS and
+rebuilds it when the game exits, so a child sees roughly 624KB free rather than
+612KB. Games that report "Out of memory! Try Unloading TSRs!" are sensitive to
+exactly this.
+
 The browser keeps only type, title and a file offset per entry in memory; year,
 genre, publisher, note, dir and exe are re-read from `GAMES.LST` on demand. That
 is why the entry ceiling could rise from 64 to 320 while `BROWSER.COM` got
