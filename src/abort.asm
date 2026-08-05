@@ -163,6 +163,9 @@ wd_grabs        dw      0               ; times the watchdog reclaimed INT 09h
 counting        db      1               ; gate so a reading can cover one game
 indos_blk       dw      0               ; times an abort was recognised but DOS
                                         ; was too busy to enter
+irq1_off        dw      0               ; timer ticks seen with IRQ1 masked at
+                                        ; the PIC (a game polling the keyboard
+                                        ; itself); needs /W to be sampled
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -207,6 +210,7 @@ int2f:
         mov     byte [cs:sc_last], 0
         mov     word [cs:wd_grabs], 0
         mov     word [cs:indos_blk], 0
+        mov     word [cs:irq1_off], 0
         mov     byte [cs:counting], 1
         mov     al, 0ABh
         iret
@@ -235,6 +239,7 @@ int2f:
         or      si, 0100h
 .diag_pend:
         mov     di, [cs:indos_blk]
+        mov     bp, [cs:irq1_off]
         mov     al, 0ABh
         iret
 
@@ -350,6 +355,16 @@ int08:
         push    bx
         push    dx
         push    ds
+
+        ; Is the game polling the keyboard with IRQ1 masked off? If so no
+        ; keyboard interrupt happens at all and no handler can see keys.
+        cmp     byte [cs:counting], 0
+        je      .nomask
+        in      al, 21h                 ; PIC 1 interrupt mask
+        test    al, 02h                 ; bit 1 = IRQ1 (keyboard)
+        jz      .nomask
+        inc     word [cs:irq1_off]
+.nomask:
 
         mov     dx, cs
         xor     ax, ax
