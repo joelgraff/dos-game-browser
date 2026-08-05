@@ -483,11 +483,16 @@ if ! skip_case "abort-present"; then
   expect abort-present "$out" "NENT=2"
 fi
 
-# Games such as Commander Keen and Digger Remastered install their own INT 09h
-# and never chain, which silently kills the hotkey. ABORT.COM watches the vector
-# from the timer and takes it back. STEAL.COM stands in for such a game.
+# A game that installs its own INT 09h and never chains keeps the vector, and
+# ABORT.COM deliberately does not fight it.
+#
+# A timer-driven watchdog that stole the vector back was tried and reverted: it
+# put us in front of a game that expects exclusive keyboard control, and reading
+# port 60h before the game's own handler stopped Commander Keen from starting at
+# all. A dead hotkey in such games is a far better outcome than a game that will
+# not launch. This case exists to keep that decision from being quietly undone.
 if ! skip_case "abort-watchdog"; then
-  echo "[abort-watchdog] a stolen INT 09h is reclaimed"
+  echo "[abort-watchdog] a game that seizes INT 09h keeps it (by design)"
   cat > "$WORK/steal.asm" <<'ASM'
         bits    16
         cpu     8086
@@ -547,7 +552,7 @@ EOF
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=NO"
 
-  # With the TSR resident the vector must come back.
+  # With the TSR resident the thief must STILL keep it -- we do not steal back.
   d="$WORK/wd-tsr"; mkdir -p "$d/UTILS"
   cp "$WORK/STEAL.COM" "$d/"; cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
   cat > "$d/T.CONF" <<EOF
@@ -562,7 +567,7 @@ exit
 EOF
   ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
-  expect abort-watchdog "$out" "WATCHDOG=YES"
+  expect abort-watchdog "$out" "WATCHDOG=NO"
 fi
 
 if ! skip_case "abort-absent"; then

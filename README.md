@@ -144,7 +144,32 @@ Controls in the browser:
 | A–Z | Jump to title |
 | Esc | Quit browser |
 | Ctrl+Alt+Esc | Maintenance exit — leaves the `START.BAT` loop (ERRORLEVEL 42) |
-| **Ctrl+Alt+Backspace** | Force-exit running game (ABORT TSR) |
+| **Ctrl+Alt+Backspace** | Force-exit running game (ABORT TSR — see caveat below) |
+
+The browser shows the force-exit hint only when `ABORT.COM` is actually
+resident; if it is not loaded you get a dim `ABORT.COM not loaded` notice
+instead, so the header never promises something that will not work.
+
+#### Force-exit does not work in every game
+
+`ABORT.COM` sees the hotkey by sitting in the INT 09h keyboard chain. Games
+that install their own keyboard handler and never chain to the previous one
+never call it, and the chord has no effect in those. Commander Keen and Digger
+Remastered behave this way; Jill of the Jungle and Sopwith do not.
+
+To tell which case you are in, play the game, quit it normally, then run:
+
+```bat
+C:\DGB> BROWSER.COM /T > TEST.TXT
+```
+
+`KBD scancodes=0` means the game owned the keyboard outright and the TSR was
+never called.
+
+Taking the vector back from a timer tick was tried and reverted: it put the TSR
+in front of a game that expects exclusive keyboard control and stopped Keen from
+starting at all. A dead hotkey in a few games is a much better outcome than a
+game that will not launch.
 
 ### Diagnosing path problems on the target machine
 

@@ -7,6 +7,13 @@
 ; Safe for real 8086/286/386 MS-DOS and DOSBox. Calls DOS only when InDOS
 ; is clear (or via INT 28h idle). Chains prior INT 09h / INT 28h handlers.
 ;
+; LIMITATION: games that install their own INT 09h handler and never chain
+; (Commander Keen, Digger Remastered, ...) never call this handler, so the
+; hotkey cannot work in them. Stealing the vector back from a timer tick was
+; tried and reverted -- sitting in front of a game that owns the keyboard
+; stopped Keen from starting at all. Run BROWSER.COM /T after playing: if it
+; reports KBD scancodes=0, the game owned the keyboard outright.
+;
 ; Usage:
 ;   ABORT.COM          install (prints banner)
 ;   Already resident?  prints message and exits without double-hook
@@ -50,12 +57,6 @@ start:
         mov     [orig09], bx
         mov     [orig09+2], es
 
-        ; Save old INT 08h (timer) for the keyboard-vector watchdog
-        mov     ax, 3508h
-        int     21h
-        mov     [old08], bx
-        mov     [old08+2], es
-
         ; Save old INT 28h
         mov     ax, 3528h
         int     21h
@@ -77,10 +78,6 @@ start:
         ; Hook handlers
         mov     ax, 2509h
         mov     dx, int09
-        int     21h
-
-        mov     ax, 2508h
-        mov     dx, int08
         int     21h
 
         mov     ax, 2528h
@@ -109,7 +106,6 @@ start:
 
 old09           dd      0               ; current chain target (may be a game's)
 orig09          dd      0               ; handler present when we installed
-old08           dd      0
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -231,49 +227,6 @@ int09:
         pop     ds
         pop     ax
         jmp     far [cs:old09]
-
-;------------------------------------------------------------------------------
-; INT 08h — timer. Keyboard-vector watchdog.
-;
-; Action games (Commander Keen, Digger Remastered, ...) install their own INT 09h
-; and never chain, so our handler stops being called and the hotkey goes dead.
-; Eighteen times a second, check whether INT 09h still points at us; if not,
-; adopt whatever is there as our chain target and get back in front of it.
-;
-; The vector table is edited directly rather than through DOS, because INT 21h
-; is not safe to call from a timer interrupt.
-;------------------------------------------------------------------------------
-int08:
-        pushf
-        call    far [cs:old08]          ; keep system timing intact first
-
-        push    ax
-        push    bx
-        push    dx
-        push    ds
-
-        mov     dx, cs
-        xor     ax, ax
-        mov     ds, ax
-        mov     ax, [24h]               ; INT 09h offset
-        mov     bx, [26h]               ; INT 09h segment
-        cmp     bx, dx
-        jne     .grab
-        cmp     ax, int09
-        je      .out
-.grab:
-        mov     [cs:old09], ax          ; chain to whoever took it
-        mov     [cs:old09+2], bx
-        cli
-        mov     word [24h], int09
-        mov     [26h], dx
-        sti
-.out:
-        pop     ds
-        pop     dx
-        pop     bx
-        pop     ax
-        iret
 
 ;------------------------------------------------------------------------------
 ; Point INT 09h back at us, chaining to the handler that existed at install.
