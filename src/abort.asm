@@ -166,7 +166,10 @@ old2f           dd      0
 indos_off       dw      0
 indos_seg       dw      0
 pending         db      0               ; 1 = abort requested
-busy            db      0               ; reentrancy guard
+busy            db      0               ; set while terminating; cleared by
+                                        ; INT 2Fh AB01h/AB03h when the browser
+                                        ; regains control. Without that the
+                                        ; hotkey only ever fires once.
 kf_own          db      0               ; Ctrl/Alt tracked from scancodes
 sc_count        dw      0               ; scancodes seen (diagnostic)
 sc_last         db      0               ; last scancode seen (diagnostic)
@@ -185,15 +188,19 @@ int2f:
         je      .zero
         cmp     ax, 0AB04h              ; stop counting
         je      .stop
+        cmp     ax, 0AB05h              ; mark spent (as a real abort does)
+        je      .spend
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
         iret
 .reset:
         call    reset_kbd_chain
+        mov     byte [cs:busy], 0       ; re-arm; the previous game is gone
         mov     al, 0ABh
         iret
-.zero:                                  ; AB03h: reset and start counting
+.zero:                                  ; AB03h: arm, reset and start counting
+        mov     byte [cs:busy], 0
         mov     word [cs:sc_count], 0
         mov     byte [cs:sc_last], 0
         mov     word [cs:wd_grabs], 0
@@ -204,6 +211,10 @@ int2f:
         mov     byte [cs:counting], 0
         mov     al, 0ABh
         iret
+.spend:                                 ; AB05h: leave the hotkey disarmed, the
+        mov     byte [cs:busy], 1       ; state a completed abort leaves behind.
+        mov     al, 0ABh                ; Exists so the re-arm can be tested
+        iret                            ; without synthesising a keystroke.
 .diag:
         ; BX = scancodes seen, CL = last scancode, CH = tracked Ctrl/Alt bits.
         ; Lets BROWSER.COM /T show whether the TSR is being called at all.
@@ -211,6 +222,11 @@ int2f:
         mov     cl, [cs:sc_last]
         mov     ch, [cs:kf_own]
         mov     dx, [cs:wd_grabs]
+        mov     si, 1
+        cmp     byte [cs:busy], 0       ; SI = 1 when armed, 0 when spent
+        je      .diag_armed
+        xor     si, si
+.diag_armed:
         mov     al, 0ABh
         iret
 

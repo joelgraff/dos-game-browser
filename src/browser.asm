@@ -2248,7 +2248,8 @@ selftest:
         cmp     byte [abort_res], 0
         je      .no_kbd
         mov     ax, 0AB02h
-        int     2Fh                     ; BX=count CL=last CH=flags DX=grabs
+        int     2Fh                     ; BX=count CL=last CH=flags DX=grabs SI=armed
+        push    si
         push    dx
         push    cx
         mov     di, outbuf
@@ -2268,6 +2269,10 @@ selftest:
         mov     al, ch
         call    hexbyte
         mov     si, st_kbdgrab
+        call    cpy
+        pop     ax
+        call    putdec
+        mov     si, st_kbdarm
         call    cpy
         pop     ax
         call    putdec
@@ -2569,6 +2574,7 @@ st_kbd          db 'KBD scancodes=',0
 st_kbdlast      db ' last=',0
 st_kbdflags     db ' ctrlalt=',0
 st_kbdgrab      db ' grabs=',0
+st_kbdarm       db ' armed=',0
 st_fdir         db ' DIR=',0
 st_fexe         db ' EXE=',0
 st_fyear        db ' YEAR=',0

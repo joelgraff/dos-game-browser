@@ -168,14 +168,13 @@ instead, so the header never promises something that will not work.
 
 #### Force-exit does not work in every game
 
-`ABORT.COM` sees the hotkey by sitting in the INT 09h keyboard chain. Games
-that install their own keyboard handler and never chain to the previous one
-never call it, and the chord has no effect in those. Commander Keen and Digger
-Remastered behave this way; Jill of the Jungle and Sopwith do not.
+`ABORT.COM` sees the hotkey by sitting in the INT 09h keyboard chain. A game
+that installs its own keyboard handler and never chains would never call it.
 
-The tell is timing: in Commander Keen the chord works on the splash screen and
-stops working the moment the game proper starts. That is the point at which the
-game installs its own handler and takes the interrupt away.
+Measured on the test image, this turns out to be rarer than expected: Commander
+Keen and Digger Remastered both leave the vector alone. `BROWSER.COM /T` reports
+`grabs=0` after playing them, meaning the watchdog never had to reclaim
+anything, and a non-zero `scancodes` confirms the handler ran throughout.
 
 `F12` exists as a second trigger because it needs no modifier: if a game chains
 to us but leaves the Ctrl/Alt state inconsistent, the chord fails while F12 still
@@ -199,7 +198,11 @@ C:\DGB> BROWSER.COM /T > TEST.TXT
 `KBD scancodes=0` means the game owned the keyboard outright and the TSR was
 never called.
 
-##### Trying to beat the lockout: `ABORT.COM /W`
+The force-exit re-arms itself each time a game is launched. It used to fire
+only once per boot, which looked exactly like "this game captures the keyboard"
+because a freshly started session always worked on the first attempt.
+
+##### `ABORT.COM /W` (rarely needed)
 
 There is one way to get the hotkey working in such games: watch the interrupt
 vector from the timer and take it back whenever a game grabs it. This is

@@ -478,7 +478,7 @@ if ! skip_case "abort-present"; then
   out="$(run_tsr_case abort-present "$d" 'UTILS\ABORT.COM')"
   expect abort-present "$out" "ABORT=1"
   # the keyboard diagnostic must be readable back from the TSR
-  expect_re abort-present "$out" '^KBD scancodes=[0-9]+ last=[0-9A-F]{2} ctrlalt=[0-9A-F]{2} grabs=[0-9]+$'
+  expect_re abort-present "$out" '^KBD scancodes=[0-9]+ last=[0-9A-F]{2} ctrlalt=[0-9A-F]{2} grabs=[0-9]+ armed=[01]$'
   # loading the TSR must not stop the batch before the browser runs
   expect abort-present "$out" "NENT=2"
 fi
@@ -686,6 +686,59 @@ EOF
   fi
   # and the table must be rebuilt afterwards -- this lookup needs its offset
   expect exec-memory "$out" "XREC DIR=MEMREP EXE=MEMREP.COM"
+fi
+
+# ---------------------------------------------------------------------------
+# The hotkey must re-arm between games.
+#
+# try_abort sets a busy flag before terminating and nothing cleared it, so the
+# force-exit worked exactly once per boot and then died silently. That looked
+# for a long time like "some games capture the keyboard", because a fresh
+# DOSBox session always worked on the first try. Verified against the bug: with
+# the clearing removed, launch 2 onward reports ARMED=0.
+# ---------------------------------------------------------------------------
+if ! skip_case "abort-rearm"; then
+  echo "[abort-rearm] the hotkey re-arms after being used"
+  d="$WORK/abort-rearm"; mkdir -p "$d/UTILS" "$d/GAMES/SP"
+  cat > "$WORK/spend.asm" <<'ASM'
+        bits    16
+        cpu     8086
+        org     100h
+        mov     ax, 0AB02h
+        int     2Fh
+        mov     dx, msg_spent
+        or      si, si
+        jz      .say
+        mov     dx, msg_armed
+.say:   mov     ah, 09h
+        int     21h
+        mov     ax, 0AB05h
+        int     2Fh
+        mov     ax, 4C00h
+        int     21h
+msg_armed db 'ARMED=1',13,10,'$'
+msg_spent db 'ARMED=0',13,10,'$'
+ASM
+  "$NASM" -f bin -o "$d/GAMES/SP/SPEND.COM" "$WORK/spend.asm"
+  cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
+  cp "$BIN" "$d/BROWSER.COM"
+  printf '# t\r\nG|SP|SPEND.COM|Spend|1990|Test|x|n\r\n' > "$d/GAMES.LST"
+  cat > "$d/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $d
+c:
+UTILS\\ABORT.COM
+BROWSER.COM /X > OUT1.TXT
+BROWSER.COM /X > OUT2.TXT
+exit
+EOF
+  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  o1="$(tr -d '\r' < "$d/OUT1.TXT" 2>/dev/null || true)"
+  o2="$(tr -d '\r' < "$d/OUT2.TXT" 2>/dev/null || true)"
+  expect abort-rearm "$o1" "ARMED=1"
+  expect abort-rearm "$o2" "ARMED=1"
 fi
 
 # ---------------------------------------------------------------------------
