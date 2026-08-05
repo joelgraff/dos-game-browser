@@ -104,8 +104,64 @@ printf 'title=Commander Keen\r\nyear=1990\r\npublisher=id\r\nexe=KEEN1.EXE\r\n' 
 grep -Fq 'G|COMMANDE\KEEN|KEEN1.EXE' "$d/DGB/GAMES.LST" || {
   cat "$d/DGB/GAMES.LST" >&2; fail "dir should be re-pointed to COMMANDE\\KEEN"
 }
-grep -Fq 'Corrected game directories' "$WORK/exeloc.err" || {
+grep -Fq 'Entry corrections' "$WORK/exeloc.err" || {
   cat "$WORK/exeloc.err" >&2; fail "expected a correction warning"
+}
+
+# ---------------------------------------------------------------------------
+# DOSBox repack launch scripts configure the emulator and fail on real DOS,
+# so they must never be chosen as a game's entry point.
+step "wrappers: a DOSBox-only .BAT loses to a real executable"
+d="$WORK/wrapbat"
+mkdir -p "$d/GAMES/AIRLIFT"
+printf '@echo off\r\nREM DOS Games Archive launch script\r\ncycles max\r\nAIRLIFT.EXE\r\n' \
+  > "$d/GAMES/AIRLIFT/AIRLIFT.BAT"
+printf 'MZ' > "$d/GAMES/AIRLIFT/AIRLIFT.EXE"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>"$WORK/wrapbat.err" || fail "scan failed on wrapbat fixture"
+grep -Fq 'G|AIRLIFT|AIRLIFT.EXE' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "should pick the .EXE over the DOSBox .BAT"
+}
+grep -Fq 'ignoring DOSBox-only script' "$WORK/wrapbat.err" || {
+  cat "$WORK/wrapbat.err" >&2; fail "expected a wrapper warning"
+}
+
+# ---------------------------------------------------------------------------
+step "wrappers: a plain .BAT is still preferred (not every .BAT is a wrapper)"
+d="$WORK/plainbat"
+mkdir -p "$d/GAMES/MYGAME"
+printf '@echo off\r\nLOADFIX -25\r\nGAME.EXE\r\n' > "$d/GAMES/MYGAME/START.BAT"
+printf 'MZ' > "$d/GAMES/MYGAME/GAME.EXE"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>&1 || fail "scan failed on plainbat fixture"
+grep -Fq 'G|MYGAME|START.BAT' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "a real DOS .BAT should still win"
+}
+
+# ---------------------------------------------------------------------------
+step "wrappers: only wrappers up top finds the real executable below"
+d="$WORK/wrapdeep"
+mkdir -p "$d/GAMES/COMMANDE/KEEN"
+printf '@echo off\r\nconfig -set cpu cycles=auto\r\ncd KEEN\r\nKEEN1.EXE\r\n' \
+  > "$d/GAMES/COMMANDE/KEEN.BAT"
+printf 'MZ' > "$d/GAMES/COMMANDE/KEEN/KEEN1.EXE"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>&1 || fail "scan failed on wrapdeep fixture"
+grep -Fq 'G|COMMANDE\KEEN|KEEN1.EXE' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "should descend past wrappers to the real exe"
+}
+
+# ---------------------------------------------------------------------------
+step "wrappers: a CALL to another wrapper is also a wrapper"
+d="$WORK/wrapcall"
+mkdir -p "$d/GAMES/ABS"
+printf '@echo off\r\nscaler normal2x\r\nCALL ABS.BAT\r\n' > "$d/GAMES/ABS/ABSWEB.BAT"
+printf '@echo off\r\naspect true\r\nABS.EXE\r\n'          > "$d/GAMES/ABS/ABS.BAT"
+printf 'MZ' > "$d/GAMES/ABS/ABS.EXE"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>&1 || fail "scan failed on wrapcall fixture"
+grep -Fq 'G|ABS|ABS.EXE' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "both wrapper scripts should be skipped"
 }
 
 # ---------------------------------------------------------------------------

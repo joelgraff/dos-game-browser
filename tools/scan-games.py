@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -113,6 +114,80 @@ def launchables(folder: Path) -> list[Path]:
     return out
 
 
+# DOSBox internal commands, and its bare config shortcuts. Repack launch
+# scripts use both forms. Real-DOS commands that merely look similar --
+# LOADFIX, LOADHIGH/LH, KEYB, MODE, SHARE -- are deliberately absent.
+DOSBOX_COMMANDS = {
+    "imgmount", "intro", "rescan", "ipxnet", "mixer",
+}
+DOSBOX_SETTINGS = {
+    "aspect", "autolock", "core", "cputype", "cycles", "frameskip",
+    "fullscreen", "glshader", "joysticktype", "machine", "memsize",
+    "nosound", "oplmode", "output", "prebuffer", "sbtype", "scaler",
+    "sensitivity", "usescancodes", "vsync",
+}
+
+
+def is_dosbox_wrapper(path: Path, _depth: int = 0) -> bool:
+    """
+    True for a .BAT that drives DOSBox rather than DOS.
+
+    Repacks (DOS Games Archive and similar) ship launch scripts that configure
+    the emulator before starting the game. They work under emulation and fail
+    on real hardware, which is the target here, so they must never be chosen as
+    a game's entry point.
+    """
+    if path.suffix.lower() != ".bat":
+        return False
+    try:
+        text = path.read_text(encoding="ascii", errors="replace")
+    except OSError:
+        return False
+
+    called: list[str] = []
+
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("@").strip()
+        if not line:
+            continue
+        low = line.lower()
+        if low.startswith("rem ") or low.startswith("::"):
+            continue
+        head = low.split()
+        cmd = head[0] if head else ""
+        rest = " ".join(head[1:])
+
+        if cmd in DOSBOX_COMMANDS:
+            return True
+        if cmd in DOSBOX_SETTINGS and rest:
+            return True
+        if cmd == "config" and ("-set" in rest or "-get" in rest):
+            return True
+        if cmd == "mount" and re.match(r"^[a-z]\b", rest):
+            return True
+        if cmd == "boot" and rest:
+            return True
+        # DOSBox's virtual drive, holding its internal programs
+        if re.search(r"\bz:[\\/]", low):
+            return True
+        if cmd == "call" and rest.endswith(".bat"):
+            called.append(rest.split()[0])
+
+    # A script whose only job is to tweak settings and CALL the real wrapper.
+    if _depth < 1:
+        for name in called:
+            target = path.parent / name
+            if target.is_file() and is_dosbox_wrapper(target, _depth + 1):
+                return True
+
+    return False
+
+
+def real_launchables(folder: Path) -> list[Path]:
+    """Launchables excluding DOSBox-only wrapper scripts."""
+    return [p for p in launchables(folder) if not is_dosbox_wrapper(p)]
+
+
 def discover_games(games_root: Path, max_depth: int = MAX_DEPTH,
                    exclude: Path | None = None) -> list[Path]:
     """
@@ -149,13 +224,15 @@ def discover_games(games_root: Path, max_depth: int = MAX_DEPTH,
 def choose_exe(candidates: list[Path]) -> Path:
     ext_rank = {".bat": 0, ".exe": 1, ".com": 2}
 
-    def score(p: Path) -> tuple[int, int, str]:
+    def score(p: Path) -> tuple[int, int, int, str]:
         name = p.name.lower()
         try:
             pref = PREFER_EXE.index(name)
         except ValueError:
             pref = len(PREFER_EXE) + 1
-        return (ext_rank.get(p.suffix.lower(), 9), pref, name)
+        # DOSBox wrappers rank below everything real.
+        wrapper = 1 if is_dosbox_wrapper(p) else 0
+        return (wrapper, ext_rank.get(p.suffix.lower(), 9), pref, name)
 
     return sorted(candidates, key=score)[0]
 
@@ -235,6 +312,21 @@ def host_to_dos_rel(path: Path) -> str:
 # Record building
 # ---------------------------------------------------------------------------
 
+def deep_real_launchable(folder: Path) -> Path | None:
+    """Shallowest non-wrapper launchable anywhere under folder."""
+    found = [p for p in folder.rglob("*")
+             if p.is_file()
+             and p.suffix.lower() in LAUNCH_EXT
+             and p.name.lower() not in SKIP
+             and not is_dosbox_wrapper(p)]
+    if not found:
+        return None
+    found.sort(key=lambda p: (len(p.relative_to(folder).parts), str(p).lower()))
+    depth = len(found[0].relative_to(folder).parts)
+    return choose_exe([p for p in found
+                       if len(p.relative_to(folder).parts) == depth])
+
+
 def resolve_exe(folder: Path, exe: str) -> tuple[Path, str, str | None]:
     """
     Locate the executable a GAME.TXT names.
@@ -244,8 +336,10 @@ def resolve_exe(folder: Path, exe: str) -> tuple[Path, str, str | None]:
     GAME.TXT. Launching that entry would CHDIR to the wrong place and fail with
     "file not found", so re-point the directory at where the file actually is.
 
-    Returns (directory, actual filename, warning or None). Matching is
-    case-insensitive because DOS filenames are, but Linux hosts are not.
+    Returns (directory, actual filename, status) where status is None if the
+    file was already in place, "moved" if the directory had to be re-pointed,
+    or "missing" if it exists nowhere. Matching is case-insensitive because DOS
+    filenames are, but Linux hosts are not.
     """
     if not exe:
         return folder, exe, None
@@ -263,15 +357,9 @@ def resolve_exe(folder: Path, exe: str) -> tuple[Path, str, str | None]:
     )
     if matches:
         found = matches[0]
-        sub = found.parent.relative_to(folder)
-        return found.parent, found.name, (
-            f"{folder.name}: exe={exe} is not in that directory; "
-            f"using {host_to_dos_rel(sub)}\\{found.name}"
-        )
+        return found.parent, found.name, "moved"
 
-    return folder, exe, (
-        f"{folder.name}: exe={exe} was not found anywhere under the game folder"
-    )
+    return folder, exe, "missing"
 
 
 def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
@@ -284,7 +372,18 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
         candidates = launchables(folder)
         if not candidates:
             continue
-        chosen = choose_exe(candidates)
+
+        # Prefer something that runs on real DOS over a DOSBox launch script.
+        reals = real_launchables(folder)
+        skipped = [p.name for p in candidates if p not in reals]
+        deep = None
+        if reals:
+            chosen = choose_exe(reals)
+        else:
+            deep = deep_real_launchable(folder)
+            chosen = deep if deep else choose_exe(candidates)
+
+        no_real_anywhere = not reals and not deep
 
         meta_path = folder / "GAME.TXT"
         meta = parse_game_txt(meta_path)
@@ -309,12 +408,35 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
 
         # The recorded directory must be the one holding the executable, or the
         # launcher CHDIRs somewhere the exe is not and EXEC fails.
-        run_dir, exe_name, warning = resolve_exe(folder, updated.get("exe", chosen.name))
-        if warning:
-            warnings.append(warning)
+        run_dir, exe_name, status = resolve_exe(folder, updated.get("exe", chosen.name))
         if not exe_name:
             exe_name = chosen.name
         updated["exe"] = exe_name
+
+        # One message per game, describing where it actually ended up.
+        where = exe_name
+        if run_dir != folder:
+            where = host_to_dos_rel(run_dir.relative_to(folder)) + "\\" + exe_name
+        if no_real_anywhere:
+            warnings.append(
+                f"{folder.name}: only DOSBox-only script(s) found "
+                f"({', '.join(skipped)}); this entry will not run on real DOS"
+            )
+        elif skipped:
+            warnings.append(
+                f"{folder.name}: ignoring DOSBox-only script(s) "
+                f"{', '.join(skipped)}; using {where}"
+            )
+        elif status == "moved":
+            warnings.append(
+                f"{folder.name}: exe={updated.get('exe')} is not in that "
+                f"directory; using {where}"
+            )
+        elif status == "missing":
+            warnings.append(
+                f"{folder.name}: exe={exe_name} was not found anywhere under "
+                "the game folder"
+            )
 
         if (not meta_path.exists()) or (updated != meta):
             write_game_txt(meta_path, updated, dry_run=dry_run)
@@ -340,8 +462,7 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
         )
 
     if warnings:
-        print("\nCorrected game directories (exe was not where GAME.TXT implied):",
-              file=sys.stderr)
+        print("\nEntry corrections (review these):", file=sys.stderr)
         for w in warnings:
             print(f"  {w}", file=sys.stderr)
 
