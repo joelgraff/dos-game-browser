@@ -481,6 +481,88 @@ if ! skip_case "abort-present"; then
   expect abort-present "$out" "NENT=2"
 fi
 
+# Games such as Commander Keen and Digger Remastered install their own INT 09h
+# and never chain, which silently kills the hotkey. ABORT.COM watches the vector
+# from the timer and takes it back. STEAL.COM stands in for such a game.
+if ! skip_case "abort-watchdog"; then
+  echo "[abort-watchdog] a stolen INT 09h is reclaimed"
+  cat > "$WORK/steal.asm" <<'ASM'
+        bits    16
+        cpu     8086
+        org     100h
+start:
+        mov     ax, 2509h
+        mov     dx, dummy09
+        int     21h
+        xor     ax, ax
+        mov     es, ax
+        mov     ax, [es:46Ch]
+        add     ax, 5
+        mov     bx, ax
+.wait:  mov     ax, [es:46Ch]
+        cmp     ax, bx
+        jb      .wait
+        xor     ax, ax
+        mov     es, ax
+        mov     ax, [es:24h]
+        mov     dx, [es:26h]
+        mov     si, msg_kept
+        mov     bx, cs
+        cmp     dx, bx
+        jne     .taken
+        cmp     ax, dummy09
+        jne     .taken
+        jmp     .say
+.taken: mov     si, msg_taken
+.say:   mov     dx, si
+        mov     ah, 09h
+        int     21h
+        mov     ax, 4C00h
+        int     21h
+dummy09:
+        push    ax
+        mov     al, 20h
+        out     20h, al
+        pop     ax
+        iret
+msg_kept   db 'WATCHDOG=NO',13,10,'$'
+msg_taken  db 'WATCHDOG=YES',13,10,'$'
+ASM
+  "$NASM" -f bin -o "$WORK/STEAL.COM" "$WORK/steal.asm"
+
+  # Control: with no TSR the thief must keep the vector, proving the probe works.
+  d="$WORK/wd-none"; mkdir -p "$d"; cp "$WORK/STEAL.COM" "$d/"
+  cat > "$d/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $d
+c:
+STEAL.COM > OUT.TXT
+exit
+EOF
+  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
+  expect abort-watchdog "$out" "WATCHDOG=NO"
+
+  # With the TSR resident the vector must come back.
+  d="$WORK/wd-tsr"; mkdir -p "$d/UTILS"
+  cp "$WORK/STEAL.COM" "$d/"; cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
+  cat > "$d/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $d
+c:
+UTILS\\ABORT.COM
+STEAL.COM > OUT.TXT
+exit
+EOF
+  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
+  expect abort-watchdog "$out" "WATCHDOG=YES"
+fi
+
 if ! skip_case "abort-absent"; then
   echo "[abort-absent] no ABORT.COM is reported as absent"
   d="$WORK/abort-absent"; mkdir -p "$d"; make_lst "$d"

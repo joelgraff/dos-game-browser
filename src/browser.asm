@@ -1375,6 +1375,12 @@ reinit_after_game:
         ; Games often hook IRQs and never unhook if force-killed — restore ours
         call    restore_vectors
 
+        ; The ABORT TSR may have adopted the game's INT 09h handler while it
+        ; ran; that handler is gone now, so tell it to fall back to the
+        ; original chain (INT 2Fh AB01h, ignored when the TSR is absent).
+        mov     ax, 0AB01h
+        int     2Fh
+
         call    shrink_mem
 
         mov     ah, 0Eh

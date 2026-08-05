@@ -42,11 +42,19 @@ start:
         int     21h
 
 .install:
-        ; Save old INT 09h
+        ; Save old INT 09h (also kept permanently as the fallback chain)
         mov     ax, 3509h
         int     21h
         mov     [old09], bx
         mov     [old09+2], es
+        mov     [orig09], bx
+        mov     [orig09+2], es
+
+        ; Save old INT 08h (timer) for the keyboard-vector watchdog
+        mov     ax, 3508h
+        int     21h
+        mov     [old08], bx
+        mov     [old08+2], es
 
         ; Save old INT 28h
         mov     ax, 3528h
@@ -69,6 +77,10 @@ start:
         ; Hook handlers
         mov     ax, 2509h
         mov     dx, int09
+        int     21h
+
+        mov     ax, 2508h
+        mov     dx, int08
         int     21h
 
         mov     ax, 2528h
@@ -95,7 +107,9 @@ start:
 ; Resident data + handlers
 ;==============================================================================
 
-old09           dd      0
+old09           dd      0               ; current chain target (may be a game's)
+orig09          dd      0               ; handler present when we installed
+old08           dd      0
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -108,11 +122,17 @@ busy            db      0               ; reentrancy guard
 ;------------------------------------------------------------------------------
 int2f:
         cmp     ax, 0AB00h
-        jne     .chain
+        je      .present
+        cmp     ax, 0AB01h              ; reset keyboard chain
+        je      .reset
+        jmp     far [cs:old2f]
+.present:
         mov     al, 0ABh
         iret
-.chain:
-        jmp     far [cs:old2f]
+.reset:
+        call    reset_kbd_chain
+        mov     al, 0ABh
+        iret
 
 ;------------------------------------------------------------------------------
 ; INT 09h — keyboard
@@ -162,6 +182,77 @@ int09:
         pop     ds
         pop     ax
         jmp     far [cs:old09]
+
+;------------------------------------------------------------------------------
+; INT 08h — timer. Keyboard-vector watchdog.
+;
+; Action games (Commander Keen, Digger Remastered, ...) install their own INT 09h
+; and never chain, so our handler stops being called and the hotkey goes dead.
+; Eighteen times a second, check whether INT 09h still points at us; if not,
+; adopt whatever is there as our chain target and get back in front of it.
+;
+; The vector table is edited directly rather than through DOS, because INT 21h
+; is not safe to call from a timer interrupt.
+;------------------------------------------------------------------------------
+int08:
+        pushf
+        call    far [cs:old08]          ; keep system timing intact first
+
+        push    ax
+        push    bx
+        push    dx
+        push    ds
+
+        mov     dx, cs
+        xor     ax, ax
+        mov     ds, ax
+        mov     ax, [24h]               ; INT 09h offset
+        mov     bx, [26h]               ; INT 09h segment
+        cmp     bx, dx
+        jne     .grab
+        cmp     ax, int09
+        je      .out
+.grab:
+        mov     [cs:old09], ax          ; chain to whoever took it
+        mov     [cs:old09+2], bx
+        cli
+        mov     word [24h], int09
+        mov     [26h], dx
+        sti
+.out:
+        pop     ds
+        pop     dx
+        pop     bx
+        pop     ax
+        iret
+
+;------------------------------------------------------------------------------
+; Point INT 09h back at us, chaining to the handler that existed at install.
+; Used before terminating a game (whose handler is about to be freed) and via
+; INT 2Fh AB01h, which BROWSER.COM calls after a game exits normally.
+;------------------------------------------------------------------------------
+reset_kbd_chain:
+        push    ax
+        push    dx
+        push    ds
+
+        mov     ax, [cs:orig09]
+        mov     [cs:old09], ax
+        mov     ax, [cs:orig09+2]
+        mov     [cs:old09+2], ax
+
+        mov     dx, cs
+        xor     ax, ax
+        mov     ds, ax
+        cli
+        mov     word [24h], int09
+        mov     [26h], dx
+        sti
+
+        pop     ds
+        pop     dx
+        pop     ax
+        ret
 
 ;------------------------------------------------------------------------------
 ; INT 28h — DOS idle; retry pending abort
@@ -218,6 +309,10 @@ try_abort:
 
         mov     byte [cs:busy], 1
         mov     byte [cs:pending], 0
+
+        ; The game we are about to kill may own INT 09h. Drop its handler from
+        ; our chain now, or the vector would point into freed memory.
+        call    reset_kbd_chain
 
         ; Critical: enable interrupts for DOS
         sti
