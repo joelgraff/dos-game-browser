@@ -117,27 +117,51 @@ int2f:
 ;------------------------------------------------------------------------------
 ; INT 09h — keyboard
 ;------------------------------------------------------------------------------
+; Peek the raw scancode before the BIOS consumes it.
+;
+; Do not be tempted to inspect the BIOS keyboard buffer instead: with Alt held
+; the BIOS produces no ASCII for Backspace, so the chord never reaches the
+; buffer and a buffer comparison can never match. The scancode is the only
+; reliable source. (This is exactly how it regressed once already.)
 int09:
         push    ax
-        push    bx
-        push    cx
-        push    dx
         push    ds
-        pushf
-        call    far [cs:old09]
 
-        call    maybe_request_abort
-        ; Games poll the keyboard through BIOS or port 60h, so DOS never goes
-        ; idle and INT 28h never arrives. This is the path that actually fires.
-        ; The BIOS handler above has already sent EOI, so the controller is sane.
-        call    try_abort_irq
+        in      al, 60h
+        cmp     al, SC_BACKSPACE
+        jne     .chain
+
+        push    bx
+        mov     ax, 40h
+        mov     ds, ax
+        mov     al, [17h]               ; BIOS shift flags
+        pop     bx
+        and     al, KF_CTRL | KF_ALT
+        cmp     al, KF_CTRL | KF_ALT
+        jne     .chain
+
+        ; Hotkey hit. Acknowledge the keyboard, EOI the PIC, and do not chain,
+        ; so the keystroke is swallowed rather than reaching the game.
+        in      al, 61h
+        mov     ah, al
+        or      al, 80h
+        out     61h, al
+        mov     al, ah
+        out     61h, al
+        mov     al, 20h
+        out     20h, al
+
+        mov     byte [cs:pending], 1
+        call    try_abort_irq           ; the path that runs during a game
 
         pop     ds
-        pop     dx
-        pop     cx
-        pop     bx
         pop     ax
         iret
+
+.chain:
+        pop     ds
+        pop     ax
+        jmp     far [cs:old09]
 
 ;------------------------------------------------------------------------------
 ; INT 28h — DOS idle; retry pending abort
@@ -148,46 +172,6 @@ int28:
         call    try_abort_idle
 .chain:
         jmp     far [cs:old28]
-
-;------------------------------------------------------------------------------
-; maybe_request_abort — after BIOS keyboard handling, detect Ctrl+Alt+Backspace
-; in the BIOS buffer and request an abort without touching port 60h.
-;------------------------------------------------------------------------------
-maybe_request_abort:
-        push    ax
-        push    bx
-        push    cx
-        push    ds
-
-        mov     ax, 40h
-        mov     ds, ax
-
-        mov     al, [17h]
-        and     al, KF_CTRL | KF_ALT
-        cmp     al, KF_CTRL | KF_ALT
-        jne     .out
-
-        mov     bx, [1Ch]               ; tail pointer after BIOS advanced it
-        cmp     bx, [1Ah]
-        je      .out                    ; no new keystroke buffered
-
-        cmp     bx, 1Eh
-        jne     .prev_ok
-        mov     bx, 3Eh
-.prev_ok:
-        sub     bx, 2
-        cmp     word [bx], 0E08h        ; Backspace = scan 0Eh, ASCII 08h
-        jne     .out
-
-        mov     [1Ch], bx               ; swallow the buffered backspace
-        mov     byte [cs:pending], 1
-
-.out:
-        pop     ds
-        pop     cx
-        pop     bx
-        pop     ax
-        ret
 
 ;------------------------------------------------------------------------------
 ; try_abort — if pending and DOS is safe to enter, terminate current process.
