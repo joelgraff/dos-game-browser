@@ -2,7 +2,10 @@
 ; ABORT.COM — Resident force-exit hotkey for kiosk / booth use
 ;
 ; Installs as a TSR. While a game is running under the browser:
-;   Ctrl + Alt + Backspace  →  terminate current process (return to parent)
+;   F12, or Ctrl + Alt + Backspace  →  terminate current process
+;
+; F12 needs no modifier, so it still works when a game's own keyboard handler
+; has left the Ctrl/Alt state inconsistent.
 ;
 ; Safe for real 8086/286/386 MS-DOS and DOSBox. Calls DOS only when InDOS
 ; is clear (or via INT 28h idle). Chains prior INT 09h / INT 28h handlers.
@@ -33,6 +36,7 @@ KF_CTRL         equ     04h
 KF_ALT          equ     08h
 ; Make code for Backspace is 0Eh; break is 8Eh
 SC_BACKSPACE    equ     0Eh
+SC_F12          equ     58h             ; 101-key F12; no E0 prefix
 
 start:
         push    cs
@@ -127,12 +131,19 @@ int2f:
         je      .reset
         cmp     ax, 0AB02h              ; report what the handler has seen
         je      .diag
+        cmp     ax, 0AB03h              ; zero the counters
+        je      .zero
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
         iret
 .reset:
         call    reset_kbd_chain
+        mov     al, 0ABh
+        iret
+.zero:
+        mov     word [cs:sc_count], 0
+        mov     byte [cs:sc_last], 0
         mov     al, 0ABh
         iret
 .diag:
@@ -186,6 +197,12 @@ int09:
         and     byte [cs:kf_own], 0F7h
         jmp     .chain
 .nc4:
+        ; F12 fires on its own. Old DOS games predate the 101-key layout and
+        ; almost never use it, and needing no modifier means it still works if a
+        ; game's own handler has mangled the Ctrl/Alt state.
+        cmp     al, SC_F12
+        je      .hit
+
         cmp     al, SC_BACKSPACE
         jne     .chain
 
@@ -338,5 +355,5 @@ resident_end:
 ;------------------------------------------------------------------------------
 ; Transient messages (not kept after TSR)
 ;------------------------------------------------------------------------------
-msg_ok          db      'ABORT resident: Ctrl+Alt+Backspace force-exits game.',13,10,'$'
+msg_ok          db      'ABORT resident: F12 or Ctrl+Alt+Backspace force-exits game.',13,10,'$'
 msg_already     db      'ABORT already installed.',13,10,'$'

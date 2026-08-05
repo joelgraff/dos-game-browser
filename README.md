@@ -144,7 +144,8 @@ Controls in the browser:
 | A–Z | Jump to title |
 | Esc | Quit browser |
 | Ctrl+Alt+Esc | Maintenance exit — leaves the `START.BAT` loop (ERRORLEVEL 42) |
-| **Ctrl+Alt+Backspace** | Force-exit running game (ABORT TSR — see caveat below) |
+| **F12** | Force-exit running game (ABORT TSR — see caveat below) |
+| **Ctrl+Alt+Backspace** | Same, for keyboards without F12 |
 
 The browser shows the force-exit hint only when `ABORT.COM` is actually
 resident; if it is not loaded you get a dim `ABORT.COM not loaded` notice
@@ -160,6 +161,19 @@ Remastered behave this way; Jill of the Jungle and Sopwith do not.
 The tell is timing: in Commander Keen the chord works on the splash screen and
 stops working the moment the game proper starts. That is the point at which the
 game installs its own handler and takes the interrupt away.
+
+`F12` exists as a second trigger because it needs no modifier: if a game chains
+to us but leaves the Ctrl/Alt state inconsistent, the chord fails while F12 still
+works. It cannot help when the game does not call us at all — no key can.
+
+To tell those two cases apart, play the game, press the key several times, quit
+normally, then run `BROWSER.COM /T`. The counter is zeroed when a game is
+launched, so the reading covers only that session:
+
+| `/T` reading | Meaning |
+|---|---|
+| `KBD scancodes=0` | The game owns the keyboard outright; no key can work |
+| `KBD scancodes>0` | We are being called — worth reporting, the trigger is at fault |
 
 To tell which case you are in, play the game, quit it normally, then run:
 

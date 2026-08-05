@@ -1892,6 +1892,11 @@ launch:
         ; Hand the entry table back before the child loads.
         call    shrink_for_exec
 
+        ; Zero the TSR's scancode counters so a later BROWSER.COM /T reading
+        ; reflects only what happened while this game was running.
+        mov     ax, 0AB03h
+        int     2Fh
+
         mov     di, path                ; launcher-relative candidate
         mov     si, pfx
         call    cpy
@@ -2523,7 +2528,7 @@ r_note          times NLEN+1 db 0
 
 s_title         db 'DOS Game Browser',0
 s_keys          db 'Arrows move  Enter=Play',0
-s_abort         db 'CTRL+ALT+BACKSPACE exits game',0
+s_abort         db 'F12 or CTRL+ALT+BKSP exits game',0
 s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0
 s_hdr           db '(category header)',0
