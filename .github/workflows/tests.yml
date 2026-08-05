@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NASM and DOSBox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nasm dosbox
+          nasm -v
+          dosbox --version 2>&1 | head -1 || true
+
+      - name: Assemble from source
+        run: |
+          chmod +x tools/*.sh
+          ./tools/build.sh
+
+      # Prebuilt .COM files ship in booth/ so the launcher can be deployed
+      # without a cross-assembler. They must match the sources they claim to
+      # come from, or a deploy silently installs stale code -- which is exactly
+      # how an entire debugging session once got spent on an old binary.
+      - name: Prebuilt binaries match sources
+        run: |
+          git diff --exit-code --stat -- booth/BROWSER.COM booth/UTILS/ || {
+            echo
+            echo "::error::booth/*.COM differ from a fresh build of src/*.asm."
+            echo "Run ./tools/build.sh and commit the result."
+            exit 1
+          }
+
+      # BROWSER.COM's /T self-test driven under headless DOSBox: DGB.CFG
+      # parsing, index offsets, catalogs past the old ceiling, end-to-end
+      # launches, the ABORT TSR, and the memory handed back to a child.
+      - name: Launcher tests (DOSBox)
+        run: bash tools/test-browser.sh
+
+      - name: Scanner tests
+        run: bash tools/test-scan-games.sh
+
+      # These wrappers also run the PowerShell harnesses; pwsh is preinstalled
+      # on ubuntu-latest, and they skip cleanly if it ever is not.
+      - name: Image setup tests
+        run: bash tools/test-setup-image-all.sh
+
+      - name: Metadata UI tests
+        run: bash tools/test-metadata-ui-all.sh
+
+      - name: Launcher limits are consistent
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "tools")
+          import dgb_limits as L
+          print(f"MAX_ENT={L.MAX_ENT} MAXLINE={L.MAXLINE} MAX_LST_BYTES={L.MAX_LST_BYTES}")
+          # dgb_limits parses these out of src/browser.asm; defaults mean it failed.
+          assert L.MAX_ENT > 64, "MAX_ENT not parsed from browser.asm"
+          assert L.MAXLINE >= 120, "MAXLINE not parsed from browser.asm"
+          PY

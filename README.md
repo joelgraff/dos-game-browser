@@ -374,6 +374,14 @@ bash tools/test-scan-games.sh
 ```
 
 `test-browser.sh` requires `nasm` and `dosbox` (`sudo apt install nasm dosbox`).
+It sets the SDL dummy video and audio drivers itself, so it runs on a headless
+machine with no X server and no sound card.
+
+All four suites run in CI on every push and pull request
+(`.github/workflows/tests.yml`, about 30 seconds). That workflow also rebuilds
+from source and fails if the prebuilt `booth/*.COM` binaries differ from the
+sources they claim to come from — deploying a stale binary is otherwise silent,
+and costs a lot of debugging time.
 
 ## Autogenerating the launcher config
 

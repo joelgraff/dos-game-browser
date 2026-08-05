@@ -40,6 +40,10 @@ find_dosbox() {
   return 1
 }
 
+# Headless: no X server and no audio device (CI runners, servers).
+export SDL_VIDEODRIVER=dummy
+export SDL_AUDIODRIVER=dummy
+
 NASM="$(find_nasm)" || { echo "nasm not found" >&2; exit 1; }
 DOSBOX="$(find_dosbox)" || { echo "dosbox not found; install with: sudo apt install dosbox" >&2; exit 1; }
 
@@ -64,7 +68,7 @@ c:
 BROWSER.COM /T > OUT.TXT
 exit
 EOF
-  ( cd "$dir" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$dir" && timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   # DOS writes CRLF; normalize for host-side comparison
   tr -d '\r' < "$dir/OUT.TXT" 2>/dev/null || true
 }
@@ -386,7 +390,7 @@ c:
 BROWSER.COM /X > OUT.TXT
 exit
 EOF
-  ( cd "$dir" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$dir" && timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   tr -d '\r' < "$dir/OUT.TXT" 2>/dev/null || true
 }
 
@@ -427,7 +431,7 @@ cd \\DGB
 BROWSER.COM /X > \\OUT.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect launch-cfg "$out" "XDONE"
   expect launch-cfg "$out" "XREC DIR=JILL EXE=JILL.COM"
@@ -467,7 +471,7 @@ $load
 BROWSER.COM /T > OUT.TXT
 exit
 EOF
-  ( cd "$dir" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$dir" && timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   tr -d '\r' < "$dir/OUT.TXT" 2>/dev/null || true
 }
 
@@ -548,7 +552,7 @@ c:
 STEAL.COM > OUT.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=NO"
 
@@ -565,7 +569,7 @@ UTILS\\ABORT.COM
 STEAL.COM > OUT.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=NO"
 
@@ -583,7 +587,7 @@ UTILS\\ABORT.COM /W
 STEAL.COM > OUT.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=YES"
 fi
@@ -673,7 +677,7 @@ c:
 BROWSER.COM /X > OUT.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   freekb="$(grep -oE 'FREEKB=[0-9]+' <<<"$out" | cut -d= -f2 | head -1)"
   if [[ -n "$freekb" && "$freekb" -ge 620 ]]; then
@@ -734,7 +738,7 @@ BROWSER.COM /X > OUT1.TXT
 BROWSER.COM /X > OUT2.TXT
 exit
 EOF
-  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  ( cd "$d" && timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   o1="$(tr -d '\r' < "$d/OUT1.TXT" 2>/dev/null || true)"
   o2="$(tr -d '\r' < "$d/OUT2.TXT" 2>/dev/null || true)"
   expect abort-rearm "$o1" "ARMED=1"
