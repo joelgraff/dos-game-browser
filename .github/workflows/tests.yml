@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NASM and DOSBox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nasm dosbox
+          nasm -v
+          dosbox --version 2>&1 | head -1 || true
+
+      - name: Assemble from source
+        run: python3 dgb.py build
+
+      # Prebuilt .COM files ship in bin/ so the launcher can be deployed
+      # without a cross-assembler. They must match the sources they claim to
+      # come from, or a deploy silently installs stale code -- which is exactly
+      # how an entire debugging session once got spent on an old binary.
+      - name: Prebuilt binaries match sources
+        run: |
+          git diff --exit-code --stat -- bin/ || {
+            echo
+            echo "::error::bin/*.COM differ from a fresh build of src/*.asm."
+            echo "Run 'python3 dgb.py build' and commit the result."
+            exit 1
+          }
+
+      # The whole suite: stdlib unittest, no pip install. Covers the DOSBox
+      # launcher tests, the scanner, SCAN.COM parity with the Python scanner,
+      # and the install/stage commands.
+      - name: Test suite
+        run: python3 dgb.py test --verbose
+
+      - name: Launcher limits are consistent
+        run: |
+          python3 - <<'PY'
+          import sys
+          from dgb import limits as L
+          print(f"MAX_ENT={L.MAX_ENT} MAXLINE={L.MAXLINE} MAX_LST_BYTES={L.MAX_LST_BYTES}")
+          # dgb_limits parses these out of src/browser.asm; defaults mean it failed.
+          assert L.MAX_ENT > 64, "MAX_ENT not parsed from browser.asm"
+          assert L.MAXLINE >= 120, "MAXLINE not parsed from browser.asm"
+          PY

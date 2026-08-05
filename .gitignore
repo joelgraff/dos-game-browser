@@ -1,13 +1,16 @@
 # Local DOSBox conf (absolute mount paths)
 config/dosbox.local.conf
 
-# Game binaries / assets (copyrighted or large — never commit)
-# Keep booth/GAMES/README.md so clones know where games go.
-booth/GAMES/*
-!booth/GAMES/README.md
+# Games live wherever you keep them, never inside the repository.
 
-# Regenerated index (rebuild with tools/scan-games.py)
-booth/GAMES.LST
+# Local staging output and saved launcher settings
+stage/
+dgb-local.json
+
+# bin/ holds built artifacts only. A launcher directory deployed into it (as
+# 'install' or a manual copy would create) is local scratch, never committed.
+bin/*/
+!bin/UTILS/
 
 # OS / editor
 .DS_Store
@@ -15,14 +18,28 @@ Thumbs.db
 *~
 *.swp
 *.tmp
+.reflex/
+.vscode/
+
+# Claude Code local state (machine-specific).
+# .claude/settings.json is shared project config and IS tracked; everything
+# else under .claude/ is per-machine and stays local.
+.claude/*
+!.claude/settings.json
+.claude/settings.local.json
 
 # Python
 __pycache__/
+*.egg-info/
 *.py[cod]
 .venv/
 venv/
 
-# Build scratch / staged CF image (regenerate with tools/make-media.sh)
+# Stray dirs from shell test fixtures with odd names
+(HEAD)/
+(working)/
+
+# Build scratch / staged media (regenerate with 'python dgb.py stage')
 dist/
 media/
 *.o
