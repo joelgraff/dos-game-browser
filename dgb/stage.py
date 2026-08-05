@@ -111,7 +111,7 @@ def run(args: argparse.Namespace) -> int:
     print(f"  total {total} bytes"
           + ("  (fits a 360K floppy)" if total < 360 * 1024 else ""))
 
-    if not (BIN / "SCAN.COM").is_file():
+    if not (BIN / "SCAN.COM").is_file():   # pragma: no cover - build issue
         print("\nNote: SCAN.COM is not built, so the index cannot be created on")
         print("the DOS machine. Generate GAMES.LST here first:")
         print("  python dgb.py scan --games-root <dir> --launcher-dir <dir>")

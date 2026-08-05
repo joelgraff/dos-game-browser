@@ -314,6 +314,7 @@ Detailed guide: [docs/SETUP-IMAGE.md](docs/SETUP-IMAGE.md)
 |--------|--------|
 | `tools/test-browser.sh` | `BROWSER.COM` itself, under headless DOSBox |
 | `tools/test-scan-games.sh` | Scanner: discovery depth, `DGB.CFG`, capacity guards |
+| `tools/test-scan-com.sh` | `SCAN.COM` produces identical output to `dgb.py scan` |
 | `tools/test-setup-image.sh` | Launcher install and conflict policy |
 
 `tools/test-browser.sh` assembles `src/browser.asm` and runs it under headless
