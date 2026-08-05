@@ -446,6 +446,50 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
+# ABORT.COM detection. The browser advertises the force-exit chord in its
+# header, which is misleading when the TSR was never loaded, so it probes the
+# INT 2Fh signature ABORT.COM installs with.
+# ---------------------------------------------------------------------------
+ABORT_COM="$WORK/ABORT.COM"
+"$NASM" -f bin -o "$ABORT_COM" "$ROOT/src/abort.asm"
+
+# run_tsr_case <name> <dir> <load-line>
+run_tsr_case() {
+  local name="$1" dir="$2" load="$3"
+  cp "$BIN" "$dir/BROWSER.COM"
+  cat > "$dir/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $dir
+c:
+$load
+BROWSER.COM /T > OUT.TXT
+exit
+EOF
+  ( cd "$dir" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$dir/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  tr -d '\r' < "$dir/OUT.TXT" 2>/dev/null || true
+}
+
+if ! skip_case "abort-present"; then
+  echo "[abort-present] ABORT.COM resident is detected"
+  d="$WORK/abort-present"; mkdir -p "$d/UTILS"; make_lst "$d"
+  cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
+  out="$(run_tsr_case abort-present "$d" 'UTILS\ABORT.COM')"
+  expect abort-present "$out" "ABORT=1"
+  # loading the TSR must not stop the batch before the browser runs
+  expect abort-present "$out" "NENT=2"
+fi
+
+if ! skip_case "abort-absent"; then
+  echo "[abort-absent] no ABORT.COM is reported as absent"
+  d="$WORK/abort-absent"; mkdir -p "$d"; make_lst "$d"
+  out="$(run_tsr_case abort-absent "$d" 'REM no tsr')"
+  expect abort-absent "$out" "ABORT=0"
+  expect abort-absent "$out" "NENT=2"
+fi
+
+# ---------------------------------------------------------------------------
 # Case: missing GAMES.LST reports failure rather than hanging
 # ---------------------------------------------------------------------------
 if ! skip_case "lst-missing"; then

@@ -66,6 +66,7 @@ start:
 
         call    detect_video
         call    set_text_mode
+        call    detect_abort
         call    init_paths
 
         call    load_list
@@ -211,6 +212,22 @@ set_text_mode:
         ret
 .m:     mov     ax, 0007h
         int     10h
+        ret
+
+;------------------------------------------------------------------------------
+; Is ABORT.COM resident? Same INT 2Fh multiplex signature ABORT.COM installs
+; with (AX=AB00h -> AL=ABh).
+;------------------------------------------------------------------------------
+detect_abort:
+        push    ax
+        mov     byte [abort_res], 0
+        mov     ax, 0AB00h
+        int     2Fh
+        cmp     al, 0ABh
+        jne     .da_done
+        mov     byte [abort_res], 1
+.da_done:
+        pop     ax
         ret
 
 ;------------------------------------------------------------------------------
@@ -1024,10 +1041,17 @@ draw:
         mov     bl, [attr_dim]
         mov     si, s_keys
         call    vputs
+        ; Only advertise the abort chord when the TSR is actually resident —
+        ; otherwise the hint is a lie and there is no way to tell from the UI.
         mov     dh, 1
         mov     dl, 38
         mov     bl, [attr_abort]
         mov     si, s_abort
+        cmp     byte [abort_res], 0
+        jne     .ab1
+        mov     bl, [attr_dim]
+        mov     si, s_noabort
+.ab1:
         call    vputs
 
         ; list starts at row 3
@@ -2141,7 +2165,17 @@ selftest:
         call    sout
         call    soutnl
 
+        call    detect_abort
         call    init_paths
+
+        mov     si, st_abort
+        call    sout
+        mov     al, [abort_res]
+        add     al, '0'
+        mov     [st_ch], al
+        mov     si, st_ch
+        call    sout
+        call    soutnl
 
         mov     si, st_cfg
         call    sout
@@ -2354,6 +2388,7 @@ pfx             times 64 db 0
 pfx_abs         times 96 db 0
 root_slash      db '\',0
 cfg_found       db 0
+abort_res       db 0                    ; ABORT.COM TSR present
 selftest_f      db 0
 fh              dw 0FFFFh
 lst_path        dw 0                    ; which of fname/fname2 resolved
@@ -2412,6 +2447,7 @@ r_note          times NLEN+1 db 0
 s_title         db 'DOS Game Browser',0
 s_keys          db 'Arrows move  Enter=Play',0
 s_abort         db 'CTRL+ALT+BACKSPACE exits game',0
+s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0
 s_hdr           db '(category header)',0
 msg_noload      db 'ERROR: GAMES.LST not found in current directory.',13,10,'$'
@@ -2427,6 +2463,7 @@ st_pfx          db 'PFX=',0
 st_pfxa         db 'PFXABS=',0
 st_nent         db 'NENT=',0
 st_lstfail      db 'LST=FAIL',0
+st_abort        db 'ABORT=',0
 st_fdir         db ' DIR=',0
 st_fexe         db ' EXE=',0
 st_fyear        db ' YEAR=',0

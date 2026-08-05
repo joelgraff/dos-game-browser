@@ -127,6 +127,10 @@ int09:
         call    far [cs:old09]
 
         call    maybe_request_abort
+        ; Games poll the keyboard through BIOS or port 60h, so DOS never goes
+        ; idle and INT 28h never arrives. This is the path that actually fires.
+        ; The BIOS handler above has already sent EOI, so the controller is sane.
+        call    try_abort_irq
 
         pop     ds
         pop     dx
@@ -141,7 +145,7 @@ int09:
 int28:
         cmp     byte [cs:pending], 0
         je      .chain
-        call    try_abort
+        call    try_abort_idle
 .chain:
         jmp     far [cs:old28]
 
@@ -186,24 +190,47 @@ maybe_request_abort:
         ret
 
 ;------------------------------------------------------------------------------
-; try_abort — if pending and DOS free, terminate current process
+; try_abort — if pending and DOS is safe to enter, terminate current process.
+;
+; The safe InDOS value differs by caller, which is why there are two entries:
+;   from INT 09h  DOS must be completely free      (InDOS == 0)
+;   from INT 28h  DOS is idling inside a call      (InDOS <= 1)
+;
+; Requiring InDOS == 0 on the INT 28h path is what made this a no-op: INT 28h
+; is issued from within a DOS call, so InDOS is never 0 there.
 ;------------------------------------------------------------------------------
+try_abort_irq:
+        push    ax
+        mov     al, 0
+        call    try_abort
+        pop     ax
+        ret
+
+try_abort_idle:
+        push    ax
+        mov     al, 1
+        call    try_abort
+        pop     ax
+        ret
+
+; AL = highest InDOS value considered safe.
 try_abort:
         push    ax
         push    bx
         push    ds
         push    es
+        mov     ah, al                  ; threshold
 
         cmp     byte [cs:busy], 0
         jne     .out
         cmp     byte [cs:pending], 0
         je      .out
 
-        ; InDOS == 0?
         mov     ds, [cs:indos_seg]
         mov     bx, [cs:indos_off]
-        cmp     byte [bx], 0
-        jne     .out
+        mov     al, [bx]
+        cmp     al, ah
+        ja      .out
 
         mov     byte [cs:busy], 1
         mov     byte [cs:pending], 0
@@ -211,15 +238,8 @@ try_abort:
         ; Critical: enable interrupts for DOS
         sti
 
-        ; Current PSP = running game (or browser if nothing nested)
-        mov     ah, 62h
-        int     21h                     ; BX = PSP
-        mov     es, bx
-
-        ; If parent PSP == self, we are top-level — do not kill COMMAND/BROWSER
-        ; alone; only kill if there is a distinct parent chain.
-        ; Always terminate current PSP with 4Ch: when a game was EXECed by
-        ; BROWSER, current PSP is the game and 4Ch returns to BROWSER's EXEC.
+        ; Terminate the current PSP. When a game was EXECed by BROWSER the
+        ; current PSP is the game, so 4Ch returns control to BROWSER's EXEC.
         mov     ax, 4C00h
         int     21h
         ; does not return
