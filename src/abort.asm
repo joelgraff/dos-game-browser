@@ -9,7 +9,8 @@
 ;
 ; LIMITATION: games that install their own INT 09h handler and never chain
 ; (Commander Keen, Digger Remastered, ...) never call this handler, so the
-; hotkey cannot work in them. Stealing the vector back from a timer tick was
+; hotkey cannot work in them. In Keen the chord works on the splash screen and
+; dies the instant the game starts -- that is when it takes the vector. Stealing the vector back from a timer tick was
 ; tried and reverted -- sitting in front of a game that owns the keyboard
 ; stopped Keen from starting at all. Run BROWSER.COM /T after playing: if it
 ; reports KBD scancodes=0, the game owned the keyboard outright.

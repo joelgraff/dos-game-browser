@@ -157,6 +157,10 @@ that install their own keyboard handler and never chain to the previous one
 never call it, and the chord has no effect in those. Commander Keen and Digger
 Remastered behave this way; Jill of the Jungle and Sopwith do not.
 
+The tell is timing: in Commander Keen the chord works on the splash screen and
+stops working the moment the game proper starts. That is the point at which the
+game installs its own handler and takes the interrupt away.
+
 To tell which case you are in, play the game, quit it normally, then run:
 
 ```bat
