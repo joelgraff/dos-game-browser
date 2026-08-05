@@ -159,6 +159,7 @@ old09           dd      0               ; current chain target (may be a game's)
 orig09          dd      0               ; handler present when we installed
 old08           dd      0               ; only used when the watchdog is on
 watchdog        db      0               ; 1 = /W given
+wd_grabs        dw      0               ; times the watchdog reclaimed INT 09h
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -192,6 +193,7 @@ int2f:
 .zero:
         mov     word [cs:sc_count], 0
         mov     byte [cs:sc_last], 0
+        mov     word [cs:wd_grabs], 0
         mov     al, 0ABh
         iret
 .diag:
@@ -200,6 +202,7 @@ int2f:
         mov     bx, [cs:sc_count]
         mov     cl, [cs:sc_last]
         mov     ch, [cs:kf_own]
+        mov     dx, [cs:wd_grabs]
         mov     al, 0ABh
         iret
 
@@ -323,6 +326,7 @@ int08:
         cmp     ax, int09
         je      .out
 .grab:
+        inc     word [cs:wd_grabs]
         mov     [cs:old09], ax
         mov     [cs:old09+2], bx
         cli
