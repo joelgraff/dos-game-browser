@@ -102,7 +102,7 @@ try {
     Set-Content -Path (Join-Path $case1 'img/DGB/BROWSER.COM') -Value 'existing' -Encoding ascii -NoNewline
     $out1 = Join-Path $case1 'out.log'
     $rc = Invoke-Python -AllowFailure -Arguments @(
-        (Join-Path $Root 'tools/setup-image.py'),
+        (Join-Path $Root 'dgb.py'), 'install',
         '--image-root', (Join-Path $case1 'img'),
         '--scan-root', 'GAMES',
         '--launcher-path', 'C:\DGB',
@@ -118,7 +118,7 @@ try {
     Set-Content -Path (Join-Path $case2 'img/DGB/BROWSER.COM') -Value 'existing' -Encoding ascii -NoNewline
     $out2 = Join-Path $case2 'out.log'
     Invoke-Python -Arguments @(
-        (Join-Path $Root 'tools/setup-image.py'),
+        (Join-Path $Root 'dgb.py'), 'install',
         '--image-root', (Join-Path $case2 'img'),
         '--scan-root', 'GAMES',
         '--launcher-path', 'C:\DGB',
@@ -136,7 +136,7 @@ try {
     Set-Content -Path (Join-Path $case3 'img/DGB/BROWSER.COM') -Value 'existing' -Encoding ascii -NoNewline
     $out3 = Join-Path $case3 'out.log'
     Invoke-Python -Arguments @(
-        (Join-Path $Root 'tools/setup-image.py'),
+        (Join-Path $Root 'dgb.py'), 'install',
         '--image-root', (Join-Path $case3 'img'),
         '--scan-root', 'GAMES',
         '--launcher-path', 'C:\DGB',
@@ -152,7 +152,7 @@ try {
     Set-Content -Path (Join-Path $case4 'img/DOSGAMES/RPG/FOO/START.BAT') -Value 'x' -Encoding ascii -NoNewline
     $out4 = Join-Path $case4 'out.log'
     Invoke-Python -Arguments @(
-        (Join-Path $Root 'tools/setup-image.py'),
+        (Join-Path $Root 'dgb.py'), 'install',
         '--image-root', (Join-Path $case4 'img'),
         '--scan-root', 'DOSGAMES',
         '--launcher-path', 'C:\DGB',
@@ -166,7 +166,7 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $case5 'img/DGB') | Out-Null
     $out5 = Join-Path $case5 'out.log'
     $rc5 = Invoke-Python -AllowFailure -Arguments @(
-        (Join-Path $Root 'tools/setup-image.py'),
+        (Join-Path $Root 'dgb.py'), 'install',
         '--image-root', (Join-Path $case5 'img'),
         '--scan-root', 'DOES_NOT_EXIST',
         '--launcher-path', 'C:\DGB',

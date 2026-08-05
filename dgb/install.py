@@ -21,9 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE_BOOTH = ROOT / "booth"
-SCANNER = ROOT / "tools" / "scan-games.py"
+from .paths import BIN, ROOT, dos_to_host_subpath, launcher_files
+from . import scan as scan_mod
 
 
 def dos_to_host_subpath(dos_path: str) -> Path:
@@ -34,22 +33,15 @@ def dos_to_host_subpath(dos_path: str) -> Path:
     return Path(*[part for part in p.split("\\") if part])
 
 
-def host_to_dos_rel(path: Path) -> str:
-    return str(path).replace("/", "\\")
-
-
 def install_launcher(
     launcher_dir: Path,
     dry_run: bool,
     verbose: bool,
     on_conflict: str,
 ) -> tuple[list[Path], list[Path]]:
-    files = [
-        (SOURCE_BOOTH / "BROWSER.COM", launcher_dir / "BROWSER.COM"),
-        (SOURCE_BOOTH / "START.BAT", launcher_dir / "START.BAT"),
-        (SOURCE_BOOTH / "UTILS" / "ABORT.COM", launcher_dir / "UTILS" / "ABORT.COM"),
-        (SOURCE_BOOTH / "UTILS" / "VDETECT.COM", launcher_dir / "UTILS" / "VDETECT.COM"),
-    ]
+    # Shared with 'stage', so what lands on a mounted image and what lands on
+    # a floppy can never diverge.
+    files = [(src, launcher_dir / Path(rel)) for src, rel in launcher_files()]
 
     skipped: list[Path] = []
     overwritten: list[Path] = []
@@ -82,27 +74,26 @@ def install_launcher(
 
 def run_scanner(args: argparse.Namespace, image_root: Path, scan_root: Path,
                 launcher_dir: Path) -> int:
-    cmd = [
-        sys.executable,
-        str(SCANNER),
-        "--games-root", str(scan_root),
-        "--launcher-dir", str(launcher_dir),
-        "--image-root", str(image_root),
-    ]
-    if args.dry_run:
-        cmd.append("--dry-run")
-    if args.verbose:
-        cmd.append("--verbose")
-    if args.sort:
-        cmd.extend(["--sort", args.sort])
-    if args.no_headers:
-        cmd.append("--no-headers")
-    sys.stdout.flush()          # keep our output ahead of the child's
-    return subprocess.call(cmd)
+    """Call the scanner directly; it is a module now, not a separate script."""
+    ns = argparse.Namespace(
+        games_root=scan_root,
+        launcher_dir=launcher_dir,
+        out=None,
+        image_root=image_root,
+        games_root_dos=None,
+        sort=args.sort,
+        no_headers=args.no_headers,
+        no_cfg=False,
+        apply_catalog=False,
+        catalog=scan_mod.CATALOG,
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+    )
+    sys.stdout.flush()
+    return scan_mod.run(ns)
 
 
-def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Set up DOS Game Browser on a mounted image")
+def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--image-root", type=Path, required=True, help="Mounted image root path on host")
     ap.add_argument(
         "--scan-root",
@@ -131,11 +122,9 @@ def parse_args() -> argparse.Namespace:
         help="Behavior when launcher files already exist (default: fail)",
     )
     ap.add_argument("--verbose", action="store_true")
-    return ap.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
+def run(args: argparse.Namespace) -> int:
     image_root = args.image_root.resolve()
     if not image_root.is_dir():
         print(f"image root not found: {image_root}", file=sys.stderr)
@@ -197,6 +186,3 @@ def main() -> int:
     print("  3. Boot image and run START.BAT from launcher path")
     return 0
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())

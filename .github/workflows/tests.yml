@@ -22,20 +22,18 @@ jobs:
           dosbox --version 2>&1 | head -1 || true
 
       - name: Assemble from source
-        run: |
-          chmod +x tools/*.sh
-          ./tools/build.sh
+        run: python3 dgb.py build
 
-      # Prebuilt .COM files ship in booth/ so the launcher can be deployed
+      # Prebuilt .COM files ship in bin/ so the launcher can be deployed
       # without a cross-assembler. They must match the sources they claim to
       # come from, or a deploy silently installs stale code -- which is exactly
       # how an entire debugging session once got spent on an old binary.
       - name: Prebuilt binaries match sources
         run: |
-          git diff --exit-code --stat -- booth/BROWSER.COM booth/UTILS/ || {
+          git diff --exit-code --stat -- bin/ || {
             echo
-            echo "::error::booth/*.COM differ from a fresh build of src/*.asm."
-            echo "Run ./tools/build.sh and commit the result."
+            echo "::error::bin/*.COM differ from a fresh build of src/*.asm."
+            echo "Run 'python3 dgb.py build' and commit the result."
             exit 1
           }
 
@@ -57,8 +55,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import sys
-          sys.path.insert(0, "tools")
-          import dgb_limits as L
+          from dgb import limits as L
           print(f"MAX_ENT={L.MAX_ENT} MAXLINE={L.MAXLINE} MAX_LST_BYTES={L.MAX_LST_BYTES}")
           # dgb_limits parses these out of src/browser.asm; defaults mean it failed.
           assert L.MAX_ENT > 64, "MAX_ENT not parsed from browser.asm"

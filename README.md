@@ -2,7 +2,7 @@
 
 A lightweight full-screen game launcher for **real MS-DOS x86 hardware** (8086 and up), with a text UI that works on MDA / CGA / EGA / VGA.
 
-You prepare the install on a modern PC, then copy the `booth/` tree to CompactFlash, an IDE DOM, a hard disk image, or any FAT volume the target machine can boot.
+You prepare the install on a modern PC, then copy the `bin/` files to CompactFlash, an IDE DOM, a hard disk image, or any FAT volume the target machine can boot.
 
 | Component | Role |
 |-----------|------|
@@ -26,20 +26,25 @@ You prepare the install on a modern PC, then copy the `booth/` tree to CompactFl
 
 ```text
 dos-game-browser/
-  booth/                 ← what you copy to the DOS machine
-    BROWSER.COM          prebuilt binary (also rebuildable)
-    START.BAT
-    GAMES.LST            generated — not always committed
-    GAMES/               your games (gitignored)
-    UTILS/ABORT.COM
-    UTILS/VDETECT.COM
-  src/                   NASM sources (browser.asm, abort.asm, vdetect.asm)
-  tools/                 build, scan, setup, review UI, media, tests
+  dgb.py                 ← one entry point for everything
+  dgb/                   host-side tooling (Python, no dependencies)
+  bin/                   prebuilt DOS binaries, copied to the target
+    BROWSER.COM  START.BAT  UTILS/ABORT.COM  UTILS/VDETECT.COM
+  src/                   NASM sources
+  tools/                 test harnesses
   docs/FORMAT.md         GAME.TXT / GAMES.LST format
   config/dosbox.conf     reference DOSBox conf
 ```
 
-Prebuilt `.COM` binaries ship in `booth/` so you can deploy without installing a cross-assembler. Sources are the source of truth; rebuild anytime with `tools/build.sh`.
+Your games are never stored in the repository, and the layout on the target
+machine is yours to choose — the tooling builds it wherever you point it.
+
+```bash
+python dgb.py --help      # every command
+python dgb.py doctor      # what this machine has installed
+```
+
+Prebuilt `.COM` binaries ship in `bin/` so you can deploy without installing a cross-assembler. Sources are the source of truth; rebuild anytime with `python dgb.py build`.
 
 ---
 
@@ -50,7 +55,7 @@ Prebuilt `.COM` binaries ship in `booth/` so you can deploy without installing a
 | Tool | Purpose |
 |------|---------|
 | **NASM** | Rebuild launcher (`sudo apt install nasm`) |
-| **Python 3** | `scan-games.py`, `fetch-samples.py` |
+| **Python 3** | all host-side tooling (`dgb.py`) |
 | **DOSBox** or **DOSBox Staging** | Optional local test |
 | **zip** / **unzip** | Optional; fetch uses Python’s zipfile |
 
@@ -69,14 +74,14 @@ Linux/macOS:
 ```bash
 cd dos-game-browser
 chmod +x tools/*.sh
-./tools/build.sh
+python dgb.py build
 ```
 
 Windows (PowerShell):
 
 ```powershell
 cd dos-game-browser
-powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
+python dgb.py build
 ```
 
 ### 3. Get sample games (recommended first run)
@@ -84,19 +89,19 @@ powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
 Games are **not** in git (copyright and size). Fetch a free/shareware pack:
 
 ```bash
-python tools/fetch-samples.py --list
-python tools/fetch-samples.py               # download + seed GAME.TXT
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth   # write booth/GAMES.LST
+python dgb.py samples --list
+python dgb.py samples               # download + seed GAME.TXT
+python dgb.py scan --games-root <games> --launcher-dir <launcher>   # write GAMES.LST
 ```
 
-Or drop your own game folders into `booth/GAMES/<8CHARDIR>/` and re-run the scanner.
+Or point the scanner at wherever your game folders already live.
 
 ### 4. Test in DOSBox
 
 Linux/macOS:
 
 ```bash
-python tools/launch-dosbox.py
+python dgb.py run
 ```
 
 Windows (PowerShell):
@@ -108,17 +113,17 @@ python .\tools\launch-dosbox.py
 To test a mounted image like `Documents/TESTIMG` where DGB is under `C:\DGB`:
 
 ```bash
-python tools/launch-dosbox.py --image-root ~/Documents/TESTIMG --launcher-dir DGB
+python dgb.py run --image-root ~/Documents/TESTIMG --launcher-dir DGB
 ```
 
 Optional local default override (kept out of git):
 
 ```bash
-python tools/launch-dosbox.py --image-root ~/Documents/TESTIMG --launcher-dir DGB --save-local
-python tools/launch-dosbox.py
+python dgb.py run --image-root ~/Documents/TESTIMG --launcher-dir DGB --save-local
+python dgb.py run
 ```
 
-This writes `tools/launch-dosbox.local.json` in your local clone only.
+This writes `dgb-local.json` in your local clone only.
 
 Controls in the browser:
 
@@ -266,20 +271,20 @@ If you already have a mounted DOS image with installed games, you can bootstrap
 the launcher directly on that image:
 
 ```bash
-python tools/setup-image.py --image-root /path/to/mounted/image
+python dgb.py install --image-root /path/to/mounted/image
 ```
 
 Useful options:
 
 ```bash
-python tools/setup-image.py --image-root /mnt/dos --scan-root GAMES --launcher-path C:\\DGB
-python tools/setup-image.py --image-root /mnt/dos --dry-run --verbose
-python tools/setup-image.py --image-root /mnt/dos --on-conflict overwrite
+python dgb.py install --image-root /mnt/dos --scan-root GAMES --launcher-path C:\\DGB
+python dgb.py install --image-root /mnt/dos --dry-run --verbose
+python dgb.py install --image-root /mnt/dos --on-conflict overwrite
 ```
 
 Notes:
 
-- `setup-image.py` installs the launcher files, then calls `tools/scan-games.py`
+- `dgb.py install` installs the launcher files, then runs the scanner
   for discovery and index generation. There is only one scanner.
 - `--scan-root` is the games root used for generated `GAMES.LST` paths.
 - Game directories may sit **1 to 3 levels** below the games root, so
@@ -329,7 +334,7 @@ machine with no X server and no sound card.
 
 All four suites run in CI on every push and pull request
 (`.github/workflows/tests.yml`, about 30 seconds). That workflow also rebuilds
-from source and fails if the prebuilt `booth/*.COM` binaries differ from the
+from source and fails if the prebuilt `bin/*.COM` binaries differ from the
 sources they claim to come from — deploying a stale binary is otherwise silent,
 and costs a lot of debugging time.
 
@@ -339,15 +344,15 @@ The browser does **not** scan directories at runtime. It only reads `GAMES.LST`.
 
 **Workflow:**
 
-1. Install each game under `booth/GAMES\<DIR>\` (8.3-friendly directory names).
-2. Optionally edit `booth/GAMES\<DIR>\GAME.TXT` (title, year, genre, exe, …).
+1. Put each game in its own directory under your games root (8.3-friendly names).
+2. Optionally edit `GAME.TXT` in that directory (title, year, genre, exe, …).
 3. Run the scanner — it picks a launch executable if `exe=` is missing, seeds incomplete `GAME.TXT`, and writes the index:
 
 ```bash
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --sort year
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --sort title --no-headers
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth --apply-catalog
+python dgb.py scan --games-root <games> --launcher-dir <launcher>
+python dgb.py scan --games-root <games> --launcher-dir <launcher> --sort year
+python dgb.py scan --games-root <games> --launcher-dir <launcher> --sort title --no-headers
+python dgb.py scan --games-root <games> --launcher-dir <launcher> --apply-catalog
 ```
 
 See [docs/FORMAT.md](docs/FORMAT.md) for field definitions and [docs/HARDWARE.md](docs/HARDWARE.md) for CF/real-hardware notes.
@@ -381,14 +386,14 @@ Recommended workflow:
 ### A. Stage a media tree
 
 ```bash
-./tools/make-media.sh              # → media/booth/
-./tools/make-media.sh --zip        # + media/dos-game-browser-booth.zip
-./tools/make-media.sh /mnt/cf      # copy onto a mounted CF/USB volume
+python dgb.py stage --out <dir>
+python dgb.py stage --out <dir>
+python dgb.py stage --out <dir>
 ```
 
 ### B. Target disk layout
 
-Copy the **contents** of `media/booth/` (or `booth/`) to a dedicated launcher directory such as `C:\DGB\`:
+Copy the staged files (or `bin/`) to a dedicated launcher directory such as `C:\DGB\`:
 
 ```text
 C:\DGB\
@@ -428,16 +433,16 @@ Or run `START.BAT` manually. `START.BAT` loads `ABORT.COM` once, then loops `BRO
 
 ## Adding your own games
 
-1. Create `booth/GAMES/MYGAME/` (max 8 characters recommended for pure DOS).
+1. Create `<games-root>/MYGAME/` (max 8 characters recommended for pure DOS).
 2. Copy the game files in.
 3. Run the scanner — it discovers launch files and writes or refreshes `GAME.TXT` and `GAMES.LST`:
 
    ```bash
-   python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
+   python dgb.py scan --games-root <games> --launcher-dir <launcher>
    ```
 4. Review the generated `GAME.TXT` files and hand-edit title, year, genre, publisher, exe, and note where needed.
 5. Re-run the scanner after edits.
-6. `./tools/make-media.sh` and recopy to the CF card or mounted image.
+6. `python dgb.py stage --out <dir>
 
 If a game lives in a subfolder (`GAMES\COMMANDE\KEEN\KEEN1.EXE`), the scanner records `dir=COMMANDE\KEEN` so the working directory is correct at launch.
 
@@ -448,7 +453,7 @@ If you want to speed up metadata cleanup, you can use an AI assistant with a pro
 ```text
 You are helping prepare a DOS game launcher catalog.
 
-I have a folder tree under booth/GAMES/ with DOS game binaries and per-game GAME.TXT files generated by a scanner.
+I have a folder tree of DOS game binaries and per-game GAME.TXT files generated by a scanner.
 
 Task:
 - Inspect the discovered binaries and existing GAME.TXT files.
@@ -480,11 +485,11 @@ To extend the sample pack, edit `tools/sample-catalog.json` and re-run fetch.
 ## Rebuild from source
 
 ```bash
-./tools/build.sh
+python dgb.py build
 # equivalent:
-# nasm -f bin -o booth/UTILS/ABORT.COM   src/abort.asm
-# nasm -f bin -o booth/UTILS/VDETECT.COM src/vdetect.asm
-# nasm -f bin -o booth/BROWSER.COM       src/browser.asm
+# nasm -f bin -o bin/UTILS/ABORT.COM   src/abort.asm
+# nasm -f bin -o bin/UTILS/VDETECT.COM src/vdetect.asm
+# nasm -f bin -o bin/BROWSER.COM       src/browser.asm
 ```
 
 ## Related work

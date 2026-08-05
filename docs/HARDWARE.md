@@ -18,13 +18,13 @@ Never rely on long filenames, Unicode, or a network stack on the target.
 - Physical HDD / SSD with a DOS-compatible controller  
 - For tiny demos: 1.44 MB floppy (launcher + a few small games)
 
-Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Install a bootable MS-DOS (or FreeDOS) system first, then copy the booth tree into its own launcher directory, such as `C:\DGB\`.
+Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Install a bootable MS-DOS (or FreeDOS) system first, then copy the launcher files into their own directory, such as `C:\DGB\`.
 
 ## Copy checklist
 
-1. On the host: run the scanner (see README), then `./tools/make-media.sh`
+1. On the host: run the scanner (see README), then `python dgb.py stage`
 2. Mount the CF/USB volume on the host (or use a USB card reader)
-3. Copy **contents** of `media/booth/` to a dedicated launcher directory, such as `C:\DGB\`
+3. Copy the staged launcher files to a dedicated directory, such as `C:\DGB\`
 4. Edit target `AUTOEXEC.BAT` to `CALL C:\DGB\START.BAT` if you want kiosk auto-start
 5. Safely eject, insert in the target, boot
 
@@ -37,12 +37,12 @@ If you already have an MS-DOS image with games on it:
 5. Review and hand-edit the generated `GAME.TXT` files where the scanner could not infer correct metadata.
 6. Re-run the scanner, then stage the image again.
 
-If the booth is not at `C:\`, either:
+If the launcher is not at `C:\`, either:
 
 - `CD` to that directory before `BROWSER.COM`, or  
 - Keep `GAMES.LST` next to `BROWSER.COM` (the browser also tries `C:\GAMES.LST`)
 
-Game paths inside `GAMES.LST` are relative to the games root recorded in `DGB.CFG` (`GAMES_ROOT`). With the default booth layout that is a `GAMES\` directory beside the browser.
+Game paths inside `GAMES.LST` are relative to the games root recorded in `DGB.CFG` (`GAMES_ROOT`). Typically that is a `GAMES\` directory beside the browser.
 
 ## Memory and TSRs
 
@@ -63,10 +63,10 @@ Not every protected-mode or DPMI title will unwind cleanly; still better than a 
 ## Verification on host before CF burn
 
 ```bash
-./tools/build.sh
+`python dgb.py build`
 python tools/fetch-samples.py --only HELLOWOR
-python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
-python tools/launch-dosbox.py
+python dgb.py scan --games-root <games> --launcher-dir <launcher>
+python dgb.py run
 ```
 
 Confirm menu navigation and that Enter launches the hello-world stub, then stage media.

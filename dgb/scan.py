@@ -30,11 +30,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import dgb_limits  # noqa: E402
+from . import limits as dgb_limits
+from .paths import ROOT, display_path, host_to_dos_rel
 
-ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "tools" / "sample-catalog.json"
+CATALOG = Path(__file__).resolve().parent / "sample-catalog.json"
 
 MAX_DEPTH = 3               # game directories at most this far below the root
 LAUNCH_EXT = {".bat", ".exe", ".com"}
@@ -293,12 +292,6 @@ def ascii_clean(s: str, maxlen: int) -> str:
     return s[:maxlen]
 
 
-def display_path(p: Path) -> str:
-    """Repo-relative when possible; the games root is often outside the repo."""
-    try:
-        return str(p.relative_to(ROOT))
-    except ValueError:
-        return str(p)
 
 
 def host_to_dos_rel(path: Path) -> str:
@@ -550,10 +543,7 @@ def resolve_games_root_dos(args: argparse.Namespace, games_root: Path) -> str | 
     return None
 
 
-def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(
-        description="Scan a games tree and write the launcher index",
-    )
+def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--games-root",
         type=Path,
@@ -595,11 +585,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--catalog", type=Path, default=CATALOG)
     ap.add_argument("--dry-run", action="store_true", help="Do not write anything")
     ap.add_argument("--verbose", action="store_true")
-    return ap.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
+def run(args: argparse.Namespace) -> int:
 
     games_root = args.games_root.resolve()
     if not games_root.is_dir():
@@ -681,6 +669,3 @@ def main() -> int:
 
     return 0
 
-
-if __name__ == "__main__":
-    sys.exit(main())

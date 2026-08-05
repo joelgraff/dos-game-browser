@@ -1,18 +1,11 @@
 # Local DOSBox conf (absolute mount paths)
 config/dosbox.local.conf
-tools/launch-dosbox.local.json
 
-# Game binaries / assets (copyrighted or large — never commit)
-# Keep booth/GAMES/README.md so clones know where games go.
-booth/GAMES/*
-!booth/GAMES/README.md
+# Games live wherever you keep them, never inside the repository.
 
-# Regenerated index (rebuild with tools/scan-games.py)
-booth/GAMES.LST
-
-# Local deploy/staging artifacts (regenerate with tools/setup-image.py)
-booth/DGB/
-booth/DGB.CFG
+# Local staging output and saved launcher settings
+stage/
+dgb-local.json
 
 # OS / editor
 .DS_Store

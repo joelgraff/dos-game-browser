@@ -6,7 +6,7 @@ mounted DOS image that already contains games.
 ## Goals
 
 - Install launcher artifacts into a target DOS directory (for example `C:\DGB`).
-- Scan a game tree for launchable files (via `tools/scan-games.py`, the
+- Scan a game tree for launchable files (via `dgb.py scan`, the
   project's only scanner). Game directories may sit 1 to 3 levels below the
   games root; a directory holding a launchable file is treated as a game and
   is not descended into, so its own `UTILS\`/`DATA\` subfolders do not become
@@ -16,7 +16,7 @@ mounted DOS image that already contains games.
 ## Basic usage
 
 ```bash
-python tools/setup-image.py --image-root /path/to/mounted/image
+python dgb.py install --image-root /path/to/mounted/image
 ```
 
 ## One-shot deployment flow
@@ -44,19 +44,19 @@ Default behavior:
 Scan default `GAMES` and install launcher at `C:\DGB`:
 
 ```bash
-python tools/setup-image.py --image-root /mnt/dos
+python dgb.py install --image-root /mnt/dos
 ```
 
 Scan a custom root and use a different launcher DOS path:
 
 ```bash
-python tools/setup-image.py --image-root /mnt/dos --scan-root DOSGAMES --launcher-path C:\\LAUNCH
+python dgb.py install --image-root /mnt/dos --scan-root DOSGAMES --launcher-path C:\\LAUNCH
 ```
 
 Preview writes only:
 
 ```bash
-python tools/setup-image.py --image-root /mnt/dos --dry-run --verbose
+python dgb.py install --image-root /mnt/dos --dry-run --verbose
 ```
 
 ## Conflict policy
@@ -66,13 +66,13 @@ exist (`BROWSER.COM`, `START.BAT`, `UTILS\ABORT.COM`, `UTILS\VDETECT.COM`).
 
 - `fail` (default): abort immediately, no overwrite.
 - `skip`: keep existing files and continue.
-- `overwrite`: replace existing files with current booth versions.
+- `overwrite`: replace existing files with the current build.
 
 Examples:
 
 ```bash
-python tools/setup-image.py --image-root /mnt/dos --on-conflict skip
-python tools/setup-image.py --image-root /mnt/dos --on-conflict overwrite
+python dgb.py install --image-root /mnt/dos --on-conflict skip
+python dgb.py install --image-root /mnt/dos --on-conflict overwrite
 ```
 
 ## Path semantics
@@ -114,7 +114,7 @@ folders when metadata is missing.
 
 1. Run setup with `--dry-run --verbose` first.
 2. Run real setup with chosen conflict policy.
-4. Re-run `tools/scan-games.py` after metadata edits (see the README for the
+4. Re-run `dgb.py scan` after metadata edits (see the README for the
    required `--games-root` / `--launcher-dir` arguments).
 5. Boot image and run `START.BAT` from launcher directory.
 

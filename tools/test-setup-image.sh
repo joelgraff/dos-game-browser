@@ -92,7 +92,7 @@ case1="$tmpdir/case1"
 mk_fixture "$case1"
 printf 'existing' > "$case1/img/DGB/BROWSER.COM"
 set +e
-$PYTHON_CMD "$ROOT/tools/setup-image.py" \
+$PYTHON_CMD "$ROOT/dgb.py" install \
   --image-root "$case1/img" \
   --scan-root GAMES \
   --launcher-path C:\\DGB \
@@ -111,7 +111,7 @@ echo "[2/5] conflict mode: skip"
 case2="$tmpdir/case2"
 mk_fixture "$case2"
 printf 'existing' > "$case2/img/DGB/BROWSER.COM"
-$PYTHON_CMD "$ROOT/tools/setup-image.py" \
+$PYTHON_CMD "$ROOT/dgb.py" install \
   --image-root "$case2/img" \
   --scan-root GAMES \
   --launcher-path C:\\DGB \
@@ -129,7 +129,7 @@ echo "[3/5] conflict mode: overwrite"
 case3="$tmpdir/case3"
 mk_fixture "$case3"
 printf 'existing' > "$case3/img/DGB/BROWSER.COM"
-$PYTHON_CMD "$ROOT/tools/setup-image.py" \
+$PYTHON_CMD "$ROOT/dgb.py" install \
   --image-root "$case3/img" \
   --scan-root GAMES \
   --launcher-path C:\\DGB \
@@ -143,7 +143,7 @@ echo "[4/5] custom scan-root path mapping"
 case4="$tmpdir/case4"
 mkdir -p "$case4/img/DOSGAMES/RPG/FOO" "$case4/img/DGB/UTILS"
 printf 'x' > "$case4/img/DOSGAMES/RPG/FOO/START.BAT"
-$PYTHON_CMD "$ROOT/tools/setup-image.py" \
+$PYTHON_CMD "$ROOT/dgb.py" install \
   --image-root "$case4/img" \
   --scan-root DOSGAMES \
   --launcher-path C:\\DGB \
@@ -156,7 +156,7 @@ echo "[5/5] invalid scan-root input"
 case5="$tmpdir/case5"
 mkdir -p "$case5/img/DGB"
 set +e
-$PYTHON_CMD "$ROOT/tools/setup-image.py" \
+$PYTHON_CMD "$ROOT/dgb.py" install \
   --image-root "$case5/img" \
   --scan-root DOES_NOT_EXIST \
   --launcher-path C:\\DGB \

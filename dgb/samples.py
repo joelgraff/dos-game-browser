@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-Fetch free / redistributable sample games into booth/GAMES/.
+Fetch free / redistributable sample games into a directory you name.
 
 Does NOT ship copyrighted retail games. Only entries listed in
 tools/sample-catalog.json (public domain, freeware, or shareware demos).
 
 Usage:
-    python tools/fetch-samples.py               # download all
-    python tools/fetch-samples.py --list
-    python tools/fetch-samples.py --only HELLOWOR SOPWITH1
-    python tools/fetch-samples.py --seed-only   # write GAME.TXT stubs only
-    python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth   # after fetch
 """
 from __future__ import annotations
 
@@ -25,7 +20,6 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GAMES = ROOT / "booth" / "GAMES"
 DEFAULT_CATALOG = Path(__file__).resolve().parent / "sample-catalog.json"
 UA = "dos-game-browser-fetch/1.0 (+https://github.com/local/dos-game-browser)"
 
@@ -173,9 +167,9 @@ def find_exe(folder: Path, preferred: str | None) -> str | None:
     return None
 
 
-def fetch_one(entry: dict, seed_only: bool) -> bool:
+def fetch_one(entry: dict, dest: Path, seed_only: bool) -> bool:
     gid = entry["id"].upper()
-    folder = GAMES / gid
+    folder = dest / gid
     meta = {
         "title": entry.get("title", gid),
         "year": entry.get("year", ""),
@@ -249,49 +243,44 @@ def fetch_one(entry: dict, seed_only: bool) -> bool:
     return True
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Fetch sample DOS games into booth/GAMES")
+def add_arguments(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--dest", type=Path,
+                    help="Directory to download games into (required unless --list)")
     ap.add_argument("--list", action="store_true", help="List catalog entries")
     ap.add_argument("--only", nargs="+", help="Only these game ids")
-    ap.add_argument(
-        "--seed-only",
-        action="store_true",
-        help="Only write GAME.TXT metadata, do not download",
-    )
-    ap.add_argument(
-        "--catalog",
-        type=Path,
-        default=DEFAULT_CATALOG,
-        help="Path to sample-catalog.json",
-    )
-    args = ap.parse_args()
+    ap.add_argument("--seed-only", action="store_true",
+                    help="Only write GAME.TXT metadata, do not download")
+    ap.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG,
+                    help="Path to sample-catalog.json")
 
+
+def run(args: argparse.Namespace) -> int:
     games = load_catalog(args.catalog)
 
     if args.list:
         for g in games:
-            print(
-                f"{g['id']:10} {g.get('source', '?'):8} {g.get('title', '')}  [{g.get('license', '')}]"
-            )
+            print(f"{g['id']:10} {g.get('source', '?'):8} "
+                  f"{g.get('title', '')}  [{g.get('license', '')}]")
         return 0
 
-    only = {x.upper() for x in args.only} if args.only else None
-    GAMES.mkdir(parents=True, exist_ok=True)
+    if args.dest is None:
+        print("--dest is required (where should the games be downloaded?)",
+              file=sys.stderr)
+        return 1
+    dest = args.dest.expanduser().resolve()
 
-    ok = 0
-    fail = 0
+    only = {x.upper() for x in args.only} if args.only else None
+    dest.mkdir(parents=True, exist_ok=True)
+
+    ok = fail = 0
     for g in games:
         if only and g["id"].upper() not in only:
             continue
-        if fetch_one(g, seed_only=args.seed_only):
+        if fetch_one(g, dest, seed_only=args.seed_only):
             ok += 1
         else:
             fail += 1
 
-    print(f"\nDone: {ok} ok, {fail} failed → {GAMES}")
-    print("Next: python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth")
+    print(f"\nDone: {ok} ok, {fail} failed -> {dest}")
+    print(f"Next: python dgb.py scan --games-root {dest} --launcher-dir <launcher>")
     return 0 if fail == 0 else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
