@@ -1331,16 +1331,25 @@ getkey:
         ret
 .ent:   mov     al, 3
         ret
+; Maintenance exit (leaves the START.BAT loop) on either Shift+Esc or
+; Ctrl+Alt+Esc.
+;
+; Shift+Esc is the one that works under DOSBox: desktop window managers grab
+; Ctrl+Alt+Esc for themselves, so it never reaches DOS. Ctrl+Alt+Esc is kept
+; because on real hardware there is no window manager to intercept it.
 .esc:   push    ds
         mov     ax, 40h
         mov     ds, ax
         mov     al, [17h]             ; BIOS keyboard flags
         pop     ds
+        test    al, 03h               ; either Shift
+        jnz     .esc_quit
         test    al, 04h               ; Ctrl
         jz      .esc_norm
         test    al, 08h               ; Alt
         jz      .esc_norm
-        mov     al, 10                ; hidden exit chord: Ctrl+Alt+Esc
+.esc_quit:
+        mov     al, 10
         ret
 .esc_norm:
         mov     al, 4
@@ -2527,7 +2536,7 @@ r_pub           times PLEN+1 db 0
 r_note          times NLEN+1 db 0
 
 s_title         db 'DOS Game Browser',0
-s_keys          db 'Arrows move  Enter=Play',0
+s_keys          db 'Arrows  Enter=Play  Shift+Esc=Quit',0
 s_abort         db 'F12 or CTRL+ALT+BKSP exits game',0
 s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0

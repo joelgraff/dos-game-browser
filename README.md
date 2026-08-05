@@ -142,10 +142,22 @@ Controls in the browser:
 | ↑ ↓ / PgUp PgDn / Home End | Move |
 | Enter | Launch game |
 | A–Z | Jump to title |
-| Esc | Quit browser |
-| Ctrl+Alt+Esc | Maintenance exit — leaves the `START.BAT` loop (ERRORLEVEL 42) |
+| Esc | Quit browser — `START.BAT` immediately relaunches it (kiosk loop) |
+| **Shift+Esc** | Maintenance exit — leaves the loop, drops to DOS (ERRORLEVEL 42) |
+| Ctrl+Alt+Esc | Same, but only on real hardware (see below) |
 | **F12** | Force-exit running game (ABORT TSR — see caveat below) |
 | **Ctrl+Alt+Backspace** | Same, for keyboards without F12 |
+
+#### Getting out of the browser
+
+`Esc` quits `BROWSER.COM`, but `START.BAT` is a kiosk loop and relaunches it
+straight away — deliberately, so a booth cannot be dropped to a DOS prompt by a
+stray keypress. Use **Shift+Esc** to leave the loop for real.
+
+Ctrl+Alt+Esc does the same thing but only works on real hardware: desktop window
+managers grab that combination for themselves, so under DOSBox it never reaches
+DOS and just unfocuses the window. Once at the DOS prompt, `exit` closes DOSBox;
+`Ctrl+F9` kills it outright from anywhere.
 
 The browser shows the force-exit hint only when `ABORT.COM` is actually
 resident; if it is not loaded you get a dim `ABORT.COM not loaded` notice
