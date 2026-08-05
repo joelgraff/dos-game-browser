@@ -14,10 +14,11 @@
 ; seize it. Off by default: it puts this handler in front of a game that expects
 ; exclusive keyboard control, which is a real risk. Try it per-game.
 ;
-; LIMITATION (without /W): games that install their own INT 09h handler and never chain
-; (Commander Keen, Digger Remastered, ...) never call this handler, so the
-; hotkey cannot work in them. In Keen the chord works on the splash screen and
-; dies the instant the game starts -- that is when it takes the vector. Stealing the vector back from a timer tick was
+; LIMITATION: a game that polls port 60h in a tight loop consumes each scancode
+; before the interrupt is serviced, leaving nothing for this handler to see.
+; Digger Remastered does exactly that: measured with the vector still ours and
+; IRQ1 still unmasked, only its start-up controller ACKs ever reached us. No
+; hotkey can work there. Commander Keen, Jill and Sopwith are all fine. Stealing the vector back from a timer tick was
 ; tried and reverted -- sitting in front of a game that owns the keyboard
 ; stopped Keen from starting at all. Run BROWSER.COM /T after playing: if it
 ; reports KBD scancodes=0, the game owned the keyboard outright.

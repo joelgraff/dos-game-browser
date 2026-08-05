@@ -168,13 +168,30 @@ instead, so the header never promises something that will not work.
 
 #### Force-exit does not work in every game
 
-`ABORT.COM` sees the hotkey by sitting in the INT 09h keyboard chain. A game
-that installs its own keyboard handler and never chains would never call it.
+`ABORT.COM` sees the hotkey by sitting in the INT 09h keyboard chain, so it
+depends on the game leaving keyboard interrupts alone. Most do.
 
-Measured on the test image, this turns out to be rarer than expected: Commander
-Keen and Digger Remastered both leave the vector alone. `BROWSER.COM /T` reports
-`grabs=0` after playing them, meaning the watchdog never had to reclaim
-anything, and a non-zero `scancodes` confirms the handler ran throughout.
+Measured on the test image: Jill of the Jungle, Sopwith and Commander Keen all
+force-exit correctly. **Digger Remastered does not**, and cannot.
+
+Its `/T` reading after a session, with `/W` enabled so the sampling runs:
+
+```text
+KBD scancodes=2 last=FA ctrlalt=00 grabs=0 irq1off=0 wdticks=157
+```
+
+`wdticks=157` shows the sampler ran for the whole session, so the zeroes are
+real: `grabs=0` means the interrupt vector still pointed at us, and `irq1off=0`
+means the keyboard IRQ was never masked. Yet only two interrupts arrived, both
+`FAh` — the keyboard's acknowledgement of Digger's own controller commands
+during start-up, not keystrokes.
+
+The explanation is that Digger polls port 60h directly in a tight loop. Reading
+that port clears the controller's output-buffer flag and deasserts the IRQ, so a
+fast enough loop consumes each scancode before the interrupt is ever serviced.
+There is no interrupt left to hook, which is why no hotkey, modifier-free or
+otherwise, can reach us. Reading the port ourselves from a timer tick would
+simply steal the keys back from the game and break its controls.
 
 `F12` exists as a second trigger because it needs no modifier: if a game chains
 to us but leaves the Ctrl/Alt state inconsistent, the chord fails while F12 still
@@ -202,7 +219,7 @@ The force-exit re-arms itself each time a game is launched. It used to fire
 only once per boot, which looked exactly like "this game captures the keyboard"
 because a freshly started session always worked on the first attempt.
 
-##### `ABORT.COM /W` (rarely needed)
+##### `ABORT.COM /W` (diagnostic; rarely needed otherwise)
 
 There is one way to get the hotkey working in such games: watch the interrupt
 vector from the timer and take it back whenever a game grabs it. This is
@@ -221,9 +238,25 @@ does. This was first shipped on by default and looked like it stopped Commander
 Keen from starting; that turned out to be a memory problem, since fixed, but the
 risk is real and per-game. Try it, and if a game misbehaves drop the `/W`.
 
-Use `BROWSER.COM /T` to see whether it is helping: the scancode counter is zeroed
-when a game launches, so a non-zero reading afterwards means the handler is being
-called during the game.
+`/W` is also what makes `BROWSER.COM /T` informative about a game: the
+`irq1off` and `wdticks` counters are sampled from the timer tick, so without it
+they always read zero and cannot be distinguished from "nothing happened".
+
+Reading a `/T` line after playing:
+
+| Field | Meaning |
+|-------|---------|
+| `scancodes` | Keyboard interrupts our handler saw during the game |
+| `last` | Last byte read from port 60h (`FAh` is a controller ACK, not a key) |
+| `grabs` | Times the `/W` watchdog had to reclaim INT 09h |
+| `armed` | 0 means the hotkey was already spent — it re-arms per launch |
+| `pend` | 1 means the chord was recognised but the abort never completed |
+| `busydos` | Aborts recognised but blocked because DOS was busy |
+| `irq1off` | Timer ticks with the keyboard IRQ masked off |
+| `wdticks` | Ticks the sampler ran. **Zero makes the two above meaningless** |
+
+The counters cover one game only: they are reset when a game is launched and
+frozen the moment it exits.
 
 ### Diagnosing path problems on the target machine
 
