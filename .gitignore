@@ -7,6 +7,11 @@ config/dosbox.local.conf
 stage/
 dgb-local.json
 
+# bin/ holds built artifacts only. A launcher directory deployed into it (as
+# 'install' or a manual copy would create) is local scratch, never committed.
+bin/*/
+!bin/UTILS/
+
 # OS / editor
 .DS_Store
 Thumbs.db
