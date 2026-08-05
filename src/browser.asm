@@ -1836,7 +1836,7 @@ shrink_mem:
         push    es
         mov     ax, cs
         mov     es, ax
-        mov     bx, end_prog
+        mov     bx, end_prog + MAX_ENT*ENT_SIZE
         add     bx, 15
         mov     cl, 4
         shr     bx, cl
@@ -2614,10 +2614,15 @@ st_xnoreopen    db 'XREOPEN=FAIL',0
 st_xnone        db 'XNONE',0
 st_ch           db 0,0
 
-; Everything below here is idle while a child runs and is handed back to it.
-; Keep the entry table last so the block can simply be truncated.
-resident_min:
-entries         times MAX_ENT*ENT_SIZE db 0
-
         align   16
-end_prog:
+
+; The entry table is not emitted into the file. A .COM owns its whole segment,
+; so the table simply lives past the end of the image: 11.5KB of zeros never
+; touch the disk, and MAX_ENT costs nothing but address space. ent_addr_ax
+; clears each slot before use, so nothing depends on it starting zeroed.
+;
+; It is also the last thing in memory, which is what lets shrink_for_exec hand
+; it straight back to DOS while a child runs.
+resident_min:                           ; shrink target while a child runs
+end_prog:                               ; the file ends here
+entries:                                ; RAM only, MAX_ENT*ENT_SIZE bytes

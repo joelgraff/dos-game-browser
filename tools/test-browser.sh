@@ -114,6 +114,20 @@ make_lst() {
 
 echo "test-browser: nasm=$NASM dosbox=$DOSBOX"
 
+# The entry table (MAX_ENT * ENT_SIZE = 11520 bytes) lives past the end of the
+# image and must never be emitted into the file. If someone reinstates it as
+# "times ... db 0" the binary jumps by that much, so anything approaching the
+# table's own size means it is back in there.
+bin_size=$(stat -c%s "$BIN")
+if [[ "$bin_size" -lt 11520 ]]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  FAILED_CASES+=("binary is ${bin_size} bytes; the entry table is being emitted into the file")
+  echo "  FAIL [image-size] BROWSER.COM is ${bin_size} bytes (expected well under 11520)"
+fi
+echo "[image-size] BROWSER.COM is ${bin_size} bytes"
+
 # ---------------------------------------------------------------------------
 # Case: no DGB.CFG -> legacy defaults preserved
 # ---------------------------------------------------------------------------

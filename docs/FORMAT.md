@@ -100,7 +100,11 @@ exactly this.
 The browser keeps only type, title and a file offset per entry in memory; year,
 genre, publisher, note, dir and exe are re-read from `GAMES.LST` on demand. That
 is why the entry ceiling could rise from 64 to 320 while `BROWSER.COM` got
-*smaller* (24.6KB → 19.8KB), leaving more conventional memory for games.
+*smaller*: 24.6KB before, 8.7KB now.
+
+The entry table itself is never written into the `.COM`. A DOS `.COM` owns its
+whole segment, so the table lives past the end of the image — it costs address
+space and nothing on disk, which is why `MAX_ENT` can be generous.
 
 ## Runtime `DGB.CFG`
 
