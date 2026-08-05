@@ -89,6 +89,52 @@ count=$(grep -c '^G|' "$d/booth/GAMES.LST")
 grep -Fq 'G|HELLOWOR|HELLO.EXE' "$d/booth/GAMES.LST" || fail "HELLOWOR missing"
 
 # ---------------------------------------------------------------------------
+# Regression: a GAME.TXT exe= naming a file that lives in a subdirectory used
+# to be recorded against the parent, so the launcher would CHDIR there and fail
+# with DOS error 02. The recorded dir must follow the executable.
+step "exe=: a subdirectory executable re-points the recorded directory"
+d="$WORK/exeloc"
+mkdir -p "$d/GAMES/COMMANDE/KEEN"
+printf 'x'  > "$d/GAMES/COMMANDE/KEEN.BAT"          # DOSBox-style wrapper
+printf 'MZ' > "$d/GAMES/COMMANDE/KEEN/KEEN1.EXE"    # the real executable
+printf 'title=Commander Keen\r\nyear=1990\r\npublisher=id\r\nexe=KEEN1.EXE\r\n' \
+  > "$d/GAMES/COMMANDE/GAME.TXT"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>"$WORK/exeloc.err" || fail "scan failed on exeloc fixture"
+grep -Fq 'G|COMMANDE\KEEN|KEEN1.EXE' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "dir should be re-pointed to COMMANDE\\KEEN"
+}
+grep -Fq 'Corrected game directories' "$WORK/exeloc.err" || {
+  cat "$WORK/exeloc.err" >&2; fail "expected a correction warning"
+}
+
+# ---------------------------------------------------------------------------
+step "exe=: matching is case-insensitive (DOS names are, Linux is not)"
+d="$WORK/execase"
+mkdir -p "$d/GAMES/JILL"
+printf 'MZ' > "$d/GAMES/JILL/JILL.EXE"
+printf 'title=Jill\r\nyear=1992\r\npublisher=Epic\r\nexe=jill.exe\r\n' \
+  > "$d/GAMES/JILL/GAME.TXT"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>&1 || fail "scan failed on execase fixture"
+grep -Fq 'G|JILL|JILL.EXE' "$d/DGB/GAMES.LST" || {
+  cat "$d/DGB/GAMES.LST" >&2; fail "lowercase exe= should resolve to the real filename"
+}
+
+# ---------------------------------------------------------------------------
+step "exe=: a name that exists nowhere warns and falls back to a real file"
+d="$WORK/exemissing"
+mkdir -p "$d/GAMES/GHOST"
+printf 'MZ' > "$d/GAMES/GHOST/REAL.EXE"
+printf 'title=Ghost\r\nyear=1990\r\npublisher=X\r\nexe=NOSUCH.EXE\r\n' \
+  > "$d/GAMES/GHOST/GAME.TXT"
+"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
+  --no-headers >/dev/null 2>"$WORK/exemissing.err" || fail "scan failed on exemissing fixture"
+grep -Fq 'was not found anywhere' "$WORK/exemissing.err" || {
+  cat "$WORK/exemissing.err" >&2; fail "expected a not-found warning"
+}
+
+# ---------------------------------------------------------------------------
 step "DGB.CFG: GAMES_ROOT derived from an explicit --image-root"
 d="$WORK/cfgimage"
 mkgame "$d/GAMES/JILL" JILL.EXE

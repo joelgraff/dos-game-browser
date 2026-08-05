@@ -235,10 +235,50 @@ def host_to_dos_rel(path: Path) -> str:
 # Record building
 # ---------------------------------------------------------------------------
 
+def resolve_exe(folder: Path, exe: str) -> tuple[Path, str, str | None]:
+    """
+    Locate the executable a GAME.TXT names.
+
+    An `exe=` value is often carried over from a repack or hand-edited, and can
+    name a file that lives in a subdirectory rather than the directory holding
+    GAME.TXT. Launching that entry would CHDIR to the wrong place and fail with
+    "file not found", so re-point the directory at where the file actually is.
+
+    Returns (directory, actual filename, warning or None). Matching is
+    case-insensitive because DOS filenames are, but Linux hosts are not.
+    """
+    if not exe:
+        return folder, exe, None
+
+    want = exe.strip().replace("/", "\\").split("\\")[-1].lower()
+
+    for f in folder.iterdir():
+        if f.is_file() and f.name.lower() == want:
+            return folder, f.name, None            # already correct
+
+    # Search the game's own subtree, shallowest first.
+    matches = sorted(
+        (p for p in folder.rglob("*") if p.is_file() and p.name.lower() == want),
+        key=lambda p: (len(p.relative_to(folder).parts), str(p).lower()),
+    )
+    if matches:
+        found = matches[0]
+        sub = found.parent.relative_to(folder)
+        return found.parent, found.name, (
+            f"{folder.name}: exe={exe} is not in that directory; "
+            f"using {host_to_dos_rel(sub)}\\{found.name}"
+        )
+
+    return folder, exe, (
+        f"{folder.name}: exe={exe} was not found anywhere under the game folder"
+    )
+
+
 def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
                     apply_catalog: bool, dry_run: bool, verbose: bool,
                     exclude: Path | None = None) -> list[Record]:
     records: list[Record] = []
+    warnings: list[str] = []
 
     for folder in discover_games(games_root, exclude=exclude):
         candidates = launchables(folder)
@@ -267,18 +307,27 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
                 if v and not updated.get(k):
                     updated[k] = v
 
+        # The recorded directory must be the one holding the executable, or the
+        # launcher CHDIRs somewhere the exe is not and EXEC fails.
+        run_dir, exe_name, warning = resolve_exe(folder, updated.get("exe", chosen.name))
+        if warning:
+            warnings.append(warning)
+        if not exe_name:
+            exe_name = chosen.name
+        updated["exe"] = exe_name
+
         if (not meta_path.exists()) or (updated != meta):
             write_game_txt(meta_path, updated, dry_run=dry_run)
             if verbose:
                 verb = "would write" if dry_run else "wrote"
                 print(f"  {verb} {display_path(meta_path)}")
 
-        rel = folder.relative_to(games_root)
+        rel = run_dir.relative_to(games_root)
         records.append(
             Record(
-                host_dir=folder,
+                host_dir=run_dir,
                 rel_dir=host_to_dos_rel(rel),
-                exe=updated.get("exe", chosen.name),
+                exe=exe_name,
                 title=updated.get("title", ""),
                 year=updated.get("year", ""),
                 genre=updated.get("genre", "Other"),
@@ -289,6 +338,12 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
                 candidates=[p.name for p in candidates],
             )
         )
+
+    if warnings:
+        print("\nCorrected game directories (exe was not where GAME.TXT implied):",
+              file=sys.stderr)
+        for w in warnings:
+            print(f"  {w}", file=sys.stderr)
 
     return records
 
