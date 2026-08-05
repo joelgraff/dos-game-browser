@@ -37,25 +37,11 @@ jobs:
             exit 1
           }
 
-      # BROWSER.COM's /T self-test driven under headless DOSBox: DGB.CFG
-      # parsing, index offsets, catalogs past the old ceiling, end-to-end
-      # launches, the ABORT TSR, and the memory handed back to a child.
-      - name: Launcher tests (DOSBox)
-        run: bash tools/test-browser.sh
-
-      - name: Scanner tests
-        run: bash tools/test-scan-games.sh
-
-      # SCAN.COM re-implements the scanner in 8086 assembly so the index can be
-      # built on the DOS machine itself. Two implementations of the same rules
-      # will drift; this requires them to produce identical output.
-      - name: Scanner parity (SCAN.COM vs dgb.py scan)
-        run: bash tools/test-scan-com.sh
-
-      # This wrapper also runs the PowerShell harness; pwsh is preinstalled on
-      # ubuntu-latest, and it skips cleanly if it ever is not.
-      - name: Image setup tests
-        run: bash tools/test-setup-image-all.sh
+      # The whole suite: stdlib unittest, no pip install. Covers the DOSBox
+      # launcher tests, the scanner, SCAN.COM parity with the Python scanner,
+      # and the install/stage commands.
+      - name: Test suite
+        run: python3 dgb.py test --verbose
 
       - name: Launcher limits are consistent
         run: |

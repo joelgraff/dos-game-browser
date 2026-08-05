@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import build, dosbox, install, samples, scan, stage
+from . import build, dosbox, install, samples, scan, stage, testcmd
 from .paths import BIN, SRC
 
 COMMANDS = {
@@ -22,6 +22,7 @@ COMMANDS = {
     "stage": ("Copy the launcher to a floppy, CF card or directory", stage),
     "run": ("Launch the image under DOSBox", dosbox),
     "samples": ("Download free sample games", samples),
+    "test": ("Run the test suite", testcmd),
 }
 
 

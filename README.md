@@ -308,36 +308,29 @@ Notes:
 
 Detailed guide: [docs/SETUP-IMAGE.md](docs/SETUP-IMAGE.md)
 
-## Regression tests
-
-| Script | Covers |
-|--------|--------|
-| `tools/test-browser.sh` | `BROWSER.COM` itself, under headless DOSBox |
-| `tools/test-scan-games.sh` | Scanner: discovery depth, `DGB.CFG`, capacity guards |
-| `tools/test-scan-com.sh` | `SCAN.COM` produces identical output to `dgb.py scan` |
-| `tools/test-setup-image.sh` | Launcher install and conflict policy |
-
-`tools/test-browser.sh` assembles `src/browser.asm` and runs it under headless
-DOSBox against fixture trees, asserting on the `/T` self-test output. It covers
-`DGB.CFG` parsing, index parsing and offsets, catalogs past the old 64-entry
-ceiling, and two end-to-end launches that verify a child process actually starts
-in the correct game directory.
+## Tests
 
 ```bash
-bash tools/test-browser.sh
-bash tools/test-browser.sh -k cfg    # only cases matching "cfg"
-bash tools/test-scan-games.sh
+python dgb.py test              # everything, about 30 seconds
+python dgb.py test --quick      # skip the DOSBox suites
+python dgb.py test -k test_scan.py
 ```
 
-`test-browser.sh` requires `nasm` and `dosbox` (`sudo apt install nasm dosbox`).
-It sets the SDL dummy video and audio drivers itself, so it runs on a headless
-machine with no X server and no sound card.
+Stdlib `unittest`, so there is nothing to install. Coverage:
 
-All four suites run in CI on every push and pull request
-(`.github/workflows/tests.yml`, about 30 seconds). That workflow also rebuilds
-from source and fails if the prebuilt `bin/*.COM` binaries differ from the
-sources they claim to come from — deploying a stale binary is otherwise silent,
-and costs a lot of debugging time.
+| File | Covers |
+|------|--------|
+| `tests/test_browser.py` | `BROWSER.COM` under headless DOSBox: config parsing, index offsets, large catalogs, end-to-end launches, the ABORT TSR |
+| `tests/test_scan.py` | The Python scanner: discovery depth, exe resolution, wrapper detection, `DGB.CFG`, capacity guards |
+| `tests/test_scan_com.py` | `SCAN.COM` produces byte-identical output to `dgb.py scan` |
+| `tests/test_install.py` | `install`, `stage` and `doctor` |
+
+The DOSBox suites need `nasm` and `dosbox` and skip cleanly without them. They
+set the SDL dummy video and audio drivers themselves, so they run headless.
+
+CI runs the whole suite on every push and pull request, and additionally
+rebuilds from source and fails if the prebuilt `bin/*.COM` differ from the
+sources they claim to come from.
 
 ## Autogenerating the launcher config
 

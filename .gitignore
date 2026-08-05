@@ -25,6 +25,7 @@ Thumbs.db
 
 # Python
 __pycache__/
+*.egg-info/
 *.py[cod]
 .venv/
 venv/
