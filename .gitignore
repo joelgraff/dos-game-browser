@@ -36,6 +36,10 @@ __pycache__/
 .venv/
 venv/
 
+# Stray dirs from shell test fixtures with odd names
+(HEAD)/
+(working)/
+
 # Build scratch / staged CF image (regenerate with tools/make-media.sh)
 dist/
 media/
