@@ -3,8 +3,8 @@
 The scanner for DOS Game Browser.
 
 Walks a games tree you point it at, seeds/refreshes per-game GAME.TXT metadata,
-and writes the launcher index (GAMES.LST). Optionally writes the runtime path
-config (DGB.CFG) and the Phase 2 review file (SETUP-REVIEW.json).
+and writes the launcher index (GAMES.LST), plus the runtime path config
+(DGB.CFG) when the DOS-side games root is known.
 
 This is the only scanner. tools/setup-image.py installs launcher files and then
 calls this script, so discovery and index generation exist in exactly one place.
@@ -13,8 +13,6 @@ The games root is never assumed — you always say where it is:
 
     python tools/scan-games.py --games-root /mnt/dos/GAMES --launcher-dir /mnt/dos/DGB
     python tools/scan-games.py --games-root booth/GAMES --launcher-dir booth
-    python tools/scan-games.py --games-root /mnt/dos/GAMES --launcher-dir /mnt/dos/DGB \
-        --image-root /mnt/dos --emit-review
 
 Game directories may sit 1 to 3 levels below the games root, so all of these
 work:
@@ -29,7 +27,7 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -89,7 +87,6 @@ class Record:
     note: str
     setup: str
     needs_review: bool
-    candidates: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +454,6 @@ def collect_records(games_root: Path, catalog: dict[str, dict[str, str]],
                 note=updated.get("note", ""),
                 setup=updated.get("setup", ""),
                 needs_review=needs_review,
-                candidates=[p.name for p in candidates],
             )
         )
 
@@ -536,36 +532,6 @@ def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool) ->
     return out
 
 
-def write_review(records: list[Record], games_root: Path, launcher_dir: Path,
-                 games_root_dos: str | None, dry_run: bool) -> Path:
-    payload = {
-        "version": 1,
-        "scan_root": str(games_root),
-        "launcher_dir": str(launcher_dir),
-        "games_root_dos": games_root_dos or "",
-        "records": [
-            {
-                "dir": str(r.host_dir),
-                "exe": r.exe,
-                "title": r.title,
-                "year": r.year,
-                "genre": r.genre,
-                "publisher": r.publisher,
-                "note": r.note,
-                "setup": r.setup,
-                "needs_review": r.needs_review,
-                "candidates": r.candidates,
-            }
-            for r in records
-        ],
-    }
-    out = launcher_dir / "SETUP-REVIEW.json"
-    if not dry_run:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return out
-
-
 # ---------------------------------------------------------------------------
 
 def resolve_games_root_dos(args: argparse.Namespace, games_root: Path) -> str | None:
@@ -598,7 +564,7 @@ def parse_args() -> argparse.Namespace:
         "--launcher-dir",
         type=Path,
         required=True,
-        help="Host path where GAMES.LST (and DGB.CFG / SETUP-REVIEW.json) are written",
+        help="Host path where GAMES.LST and DGB.CFG are written",
     )
     ap.add_argument(
         "--out",
@@ -616,11 +582,6 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
-    ap.add_argument(
-        "--emit-review",
-        action="store_true",
-        help="Also write SETUP-REVIEW.json for the Phase 2 metadata UI",
-    )
     ap.add_argument(
         "--no-cfg",
         action="store_true",
@@ -717,10 +678,6 @@ def main() -> int:
             "  falls back to its built-in \\GAMES default.",
             file=sys.stderr,
         )
-
-    if args.emit_review:
-        review = write_review(records, games_root, launcher_dir, games_root_dos, args.dry_run)
-        print(f"{verb} review file -> {review}")
 
     return 0
 

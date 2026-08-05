@@ -48,13 +48,10 @@ jobs:
       - name: Scanner tests
         run: bash tools/test-scan-games.sh
 
-      # These wrappers also run the PowerShell harnesses; pwsh is preinstalled
-      # on ubuntu-latest, and they skip cleanly if it ever is not.
+      # This wrapper also runs the PowerShell harness; pwsh is preinstalled on
+      # ubuntu-latest, and it skips cleanly if it ever is not.
       - name: Image setup tests
         run: bash tools/test-setup-image-all.sh
-
-      - name: Metadata UI tests
-        run: bash tools/test-metadata-ui-all.sh
 
       - name: Launcher limits are consistent
         run: |

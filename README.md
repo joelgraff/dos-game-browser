@@ -79,21 +79,6 @@ cd dos-game-browser
 powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
 ```
 
-### One-shot deployment and review
-
-If you already have a mounted image tree such as `~/Documents/TESTIMG`, run:
-
-```bash
-python tools/deploy-image.py --image-root ~/Documents/TESTIMG
-```
-
-This runs Phase 1 setup, installs the launcher into the image, scans the game
-tree, and then starts the local Phase 2 metadata review UI against the
-generated `SETUP-REVIEW.json`.
-
-Use `--no-browser` if you want to open the UI yourself, or `--setup-only` if
-you want Phase 1 only.
-
 ### 3. Get sample games (recommended first run)
 
 Games are **not** in git (copyright and size). Fetch a free/shareware pack:
@@ -304,7 +289,7 @@ Notes:
   extra catalog entries.
 - When multiple launch files exist in one directory, selection order is:
   `.BAT`, then `.EXE`, then `.COM`.
-- The setup writes `GAMES.LST` and `SETUP-REVIEW.json` under the launcher path.
+- The setup writes `GAMES.LST` under the launcher path.
 - The setup writes `DGB.CFG` under the launcher path, with `GAMES_ROOT` derived
   from `--image-root`. The DOS games root is never inferred from host directory
   nesting — pass `--games-root-dos` to `scan-games.py` to state it outright.
@@ -318,40 +303,6 @@ Notes:
 
 Detailed guide: [docs/SETUP-IMAGE.md](docs/SETUP-IMAGE.md)
 
-## Phase 2 metadata UI (MVP)
-
-After `setup-image.py` creates `SETUP-REVIEW.json`, launch the local metadata
-editor:
-
-```bash
-python tools/metadata-ui.py --launcher-dir /path/to/launcher-dir
-```
-
-You can also point directly at the review file:
-
-```bash
-python tools/metadata-ui.py --review-file /path/to/SETUP-REVIEW.json
-```
-
-Use the UI save action to update `GAME.TXT`, then click `Regenerate GAMES.LST`
-to rebuild the launcher index from the same scan root.
-
-Use `Bulk Apply to Filtered Unresolved` to stamp shared fields (year,
-publisher, genre) across unresolved records currently visible in the filter.
-
-Review shortcuts:
-
-- `Ctrl+S` save current record
-- `[` previous record, `]` next record
-- `N` jump to next unresolved record in current filter
-
-Regression checks:
-
-```bash
-bash tools/test-metadata-ui.sh
-bash tools/test-metadata-ui-all.sh
-```
-
 ## Regression tests
 
 | Script | Covers |
@@ -359,7 +310,6 @@ bash tools/test-metadata-ui-all.sh
 | `tools/test-browser.sh` | `BROWSER.COM` itself, under headless DOSBox |
 | `tools/test-scan-games.sh` | Scanner: discovery depth, `DGB.CFG`, capacity guards |
 | `tools/test-setup-image.sh` | Launcher install and conflict policy |
-| `tools/test-metadata-ui.sh` | Phase 2 review UI endpoints |
 
 `tools/test-browser.sh` assembles `src/browser.asm` and runs it under headless
 DOSBox against fixture trees, asserting on the `/T` self-test output. It covers

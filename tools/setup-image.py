@@ -3,8 +3,7 @@
 First-time launcher setup on a mounted DOS image.
 
 Installs the launcher files into a target directory on the image, then calls
-tools/scan-games.py to discover games and generate GAMES.LST, DGB.CFG and
-SETUP-REVIEW.json.
+tools/scan-games.py to discover games and generate GAMES.LST and DGB.CFG.
 
 Discovery and index generation live entirely in scan-games.py; this script only
 handles installation and the file-conflict policy.
@@ -89,7 +88,6 @@ def run_scanner(args: argparse.Namespace, image_root: Path, scan_root: Path,
         "--games-root", str(scan_root),
         "--launcher-dir", str(launcher_dir),
         "--image-root", str(image_root),
-        "--emit-review",
     ]
     if args.dry_run:
         cmd.append("--dry-run")
@@ -194,7 +192,7 @@ def main() -> int:
         return 2
 
     print("\nNext steps:")
-    print("  1. Review GAME.TXT files and SETUP-REVIEW.json")
+    print("  1. Review the GAME.TXT files the scan reported as needing it")
     print("  2. Regenerate the index with tools/scan-games.py after edits")
     print("  3. Boot image and run START.BAT from launcher path")
     return 0

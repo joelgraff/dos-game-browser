@@ -284,22 +284,6 @@ file "$d/DGB/GAMES.LST" | grep -q CRLF     || fail "GAMES.LST must use CRLF"
 file "$d/GAMES/JILL/GAME.TXT" | grep -q CRLF || fail "GAME.TXT must use CRLF"
 
 # ---------------------------------------------------------------------------
-step "outputs: --emit-review carries the DOS games root into the review file"
-d="$WORK/review"
-mkgame "$d/GAMES/JILL" JILL.EXE
-"$PY" "$SCAN" --games-root "$d/GAMES" --launcher-dir "$d/DGB" \
-  --image-root "$d" --emit-review >/dev/null 2>&1 || fail "scan failed with --emit-review"
-"$PY" - "$d/DGB/SETUP-REVIEW.json" <<'PY' || fail "review file did not validate"
-import json, sys
-d = json.load(open(sys.argv[1]))
-assert d["games_root_dos"] == "GAMES", d["games_root_dos"]
-assert len(d["records"]) == 1, d["records"]
-r = d["records"][0]
-for k in ("dir", "exe", "title", "needs_review", "candidates", "setup"):
-    assert k in r, f"missing {k}"
-PY
-
-# ---------------------------------------------------------------------------
 step "arguments: the games root is required, never assumed"
 if "$PY" "$SCAN" --launcher-dir "$WORK/x" >/dev/null 2>&1; then
   fail "--games-root must be required"
