@@ -161,6 +161,8 @@ old08           dd      0               ; only used when the watchdog is on
 watchdog        db      0               ; 1 = /W given
 wd_grabs        dw      0               ; times the watchdog reclaimed INT 09h
 counting        db      1               ; gate so a reading can cover one game
+indos_blk       dw      0               ; times an abort was recognised but DOS
+                                        ; was too busy to enter
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -204,6 +206,7 @@ int2f:
         mov     word [cs:sc_count], 0
         mov     byte [cs:sc_last], 0
         mov     word [cs:wd_grabs], 0
+        mov     word [cs:indos_blk], 0
         mov     byte [cs:counting], 1
         mov     al, 0ABh
         iret
@@ -223,10 +226,15 @@ int2f:
         mov     ch, [cs:kf_own]
         mov     dx, [cs:wd_grabs]
         mov     si, 1
-        cmp     byte [cs:busy], 0       ; SI = 1 when armed, 0 when spent
+        cmp     byte [cs:busy], 0       ; SI low = armed, SI high = pending
         je      .diag_armed
         xor     si, si
 .diag_armed:
+        cmp     byte [cs:pending], 0
+        je      .diag_pend
+        or      si, 0100h
+.diag_pend:
+        mov     di, [cs:indos_blk]
         mov     al, 0ABh
         iret
 
@@ -449,7 +457,12 @@ try_abort:
         mov     bx, [cs:indos_off]
         mov     al, [bx]
         cmp     al, ah
-        ja      .out
+        jbe     .go
+        cmp     byte [cs:counting], 0   ; recognised, but DOS was busy
+        je      .out
+        inc     word [cs:indos_blk]
+        jmp     .out
+.go:
 
         mov     byte [cs:busy], 1
         mov     byte [cs:pending], 0

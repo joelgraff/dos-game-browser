@@ -478,7 +478,7 @@ if ! skip_case "abort-present"; then
   out="$(run_tsr_case abort-present "$d" 'UTILS\ABORT.COM')"
   expect abort-present "$out" "ABORT=1"
   # the keyboard diagnostic must be readable back from the TSR
-  expect_re abort-present "$out" '^KBD scancodes=[0-9]+ last=[0-9A-F]{2} ctrlalt=[0-9A-F]{2} grabs=[0-9]+ armed=[01]$'
+  expect_re abort-present "$out" '^KBD scancodes=[0-9]+ last=[0-9A-F]{2} ctrlalt=[0-9A-F]{2} grabs=[0-9]+ armed=[01] pend=[01] busydos=[0-9]+$'
   # loading the TSR must not stop the batch before the browser runs
   expect abort-present "$out" "NENT=2"
 fi
