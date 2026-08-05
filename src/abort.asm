@@ -116,6 +116,9 @@ indos_off       dw      0
 indos_seg       dw      0
 pending         db      0               ; 1 = abort requested
 busy            db      0               ; reentrancy guard
+kf_own          db      0               ; Ctrl/Alt tracked from scancodes
+sc_count        dw      0               ; scancodes seen (diagnostic)
+sc_last         db      0               ; last scancode seen (diagnostic)
 
 ;------------------------------------------------------------------------------
 ; INT 2Fh — installation check (AX=AB00h → AL=ABh)
@@ -125,12 +128,22 @@ int2f:
         je      .present
         cmp     ax, 0AB01h              ; reset keyboard chain
         je      .reset
+        cmp     ax, 0AB02h              ; report what the handler has seen
+        je      .diag
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
         iret
 .reset:
         call    reset_kbd_chain
+        mov     al, 0ABh
+        iret
+.diag:
+        ; BX = scancodes seen, CL = last scancode, CH = tracked Ctrl/Alt bits.
+        ; Lets BROWSER.COM /T show whether the TSR is being called at all.
+        mov     bx, [cs:sc_count]
+        mov     cl, [cs:sc_last]
+        mov     ch, [cs:kf_own]
         mov     al, 0ABh
         iret
 
@@ -143,13 +156,48 @@ int2f:
 ; the BIOS produces no ASCII for Backspace, so the chord never reaches the
 ; buffer and a buffer comparison can never match. The scancode is the only
 ; reliable source. (This is exactly how it regressed once already.)
+; Track Ctrl and Alt from raw scancodes rather than the BIOS shift flags at
+; 0040:0017. Once a game installs its own INT 09h the BIOS handler stops being
+; called, so nothing maintains those flags and they read as zero -- the chord
+; then goes unrecognised even though we are seeing every scancode.
+;
+; E0 prefixes are ignored: right Ctrl and right Alt carry the same base codes
+; as the left ones, and no other extended key collides with 1Dh/38h/0Eh.
 int09:
         push    ax
         push    ds
 
         in      al, 60h
+
+        inc     word [cs:sc_count]      ; diagnostics (INT 2Fh AB02h)
+        mov     [cs:sc_last], al
+
+        cmp     al, 1Dh                 ; Ctrl make
+        jne     .nc1
+        or      byte [cs:kf_own], KF_CTRL
+        jmp     .chain
+.nc1:   cmp     al, 9Dh                 ; Ctrl break
+        jne     .nc2
+        and     byte [cs:kf_own], 0FBh
+        jmp     .chain
+.nc2:   cmp     al, 38h                 ; Alt make
+        jne     .nc3
+        or      byte [cs:kf_own], KF_ALT
+        jmp     .chain
+.nc3:   cmp     al, 0B8h                ; Alt break
+        jne     .nc4
+        and     byte [cs:kf_own], 0F7h
+        jmp     .chain
+.nc4:
         cmp     al, SC_BACKSPACE
         jne     .chain
+
+        ; Our own tracking first; fall back to the BIOS flags for the case
+        ; where we were installed after the modifiers were already down.
+        mov     al, [cs:kf_own]
+        and     al, KF_CTRL | KF_ALT
+        cmp     al, KF_CTRL | KF_ALT
+        je      .hit
 
         push    bx
         mov     ax, 40h
@@ -159,6 +207,7 @@ int09:
         and     al, KF_CTRL | KF_ALT
         cmp     al, KF_CTRL | KF_ALT
         jne     .chain
+.hit:
 
         ; Hotkey hit. Acknowledge the keyboard, EOI the PIC, and do not chain,
         ; so the keystroke is swallowed rather than reaching the game.

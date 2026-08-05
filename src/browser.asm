@@ -2183,6 +2183,36 @@ selftest:
         call    sout
         call    soutnl
 
+        ; What has the TSR's keyboard handler actually seen? Zero scancodes
+        ; after playing a game means it is not being called at all.
+        cmp     byte [abort_res], 0
+        je      .no_kbd
+        mov     ax, 0AB02h
+        int     2Fh                     ; BX=count CL=last CH=flags
+        push    cx
+        mov     di, outbuf
+        mov     si, st_kbd
+        call    cpy
+        mov     ax, bx
+        call    putdec
+        mov     si, st_kbdlast
+        call    cpy
+        pop     cx
+        push    cx
+        mov     al, cl
+        call    hexbyte
+        mov     si, st_kbdflags
+        call    cpy
+        pop     cx
+        mov     al, ch
+        call    hexbyte
+        xor     al, al
+        stosb
+        mov     si, outbuf
+        call    sout
+        call    soutnl
+.no_kbd:
+
         mov     si, st_cfg
         call    sout
         mov     al, [cfg_found]
@@ -2470,6 +2500,9 @@ st_pfxa         db 'PFXABS=',0
 st_nent         db 'NENT=',0
 st_lstfail      db 'LST=FAIL',0
 st_abort        db 'ABORT=',0
+st_kbd          db 'KBD scancodes=',0
+st_kbdlast      db ' last=',0
+st_kbdflags     db ' ctrlalt=',0
 st_fdir         db ' DIR=',0
 st_fexe         db ' EXE=',0
 st_fyear        db ' YEAR=',0
