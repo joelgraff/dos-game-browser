@@ -34,7 +34,7 @@ venv/
 (HEAD)/
 (working)/
 
-# Build scratch / staged CF image (regenerate with tools/make-media.sh)
+# Build scratch / staged media (regenerate with 'python dgb.py stage')
 dist/
 media/
 *.o

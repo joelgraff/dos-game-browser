@@ -3,15 +3,15 @@
 First-time launcher setup on a mounted DOS image.
 
 Installs the launcher files into a target directory on the image, then calls
-tools/scan-games.py to discover games and generate GAMES.LST and DGB.CFG.
+the scanner to discover games and generate GAMES.LST and DGB.CFG.
 
-Discovery and index generation live entirely in scan-games.py; this script only
-handles installation and the file-conflict policy.
+Discovery and index generation live entirely in dgb/scan.py; this handles
+installation and the file-conflict policy only.
 
 Usage examples:
-  python tools/setup-image.py --image-root /mnt/dos
-  python tools/setup-image.py --image-root /mnt/dos --scan-root GAMES --launcher-path C:\\DGB
-  python tools/setup-image.py --image-root /mnt/dos --dry-run --verbose
+  python dgb.py install --image-root /mnt/dos
+  python dgb.py install --image-root /mnt/dos --scan-root GAMES --launcher-path C:\\DGB
+  python dgb.py install --image-root /mnt/dos --dry-run --verbose
 """
 from __future__ import annotations
 
@@ -177,12 +177,12 @@ def run(args: argparse.Namespace) -> int:
     print("\nScanning image for launchable executables...")
     rc = run_scanner(args, image_root, scan_root, launcher_dir)
     if rc != 0:
-        print("setup failed: scan-games.py reported an error", file=sys.stderr)
+        print("setup failed: the scan reported an error", file=sys.stderr)
         return 2
 
     print("\nNext steps:")
     print("  1. Review the GAME.TXT files the scan reported as needing it")
-    print("  2. Regenerate the index with tools/scan-games.py after edits")
+    print("  2. Re-run 'dgb.py scan' after editing them")
     print("  3. Boot image and run START.BAT from launcher path")
     return 0
 

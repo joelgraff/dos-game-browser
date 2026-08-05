@@ -1,14 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bash tools/test-browser.sh)",
-      "Bash(bash tools/test-browser.sh *)",
-      "Bash(bash tools/test-scan-games.sh)",
-      "Bash(bash tools/test-metadata-ui.sh)",
-      "Bash(bash tools/test-metadata-ui-all.sh)",
-      "Bash(bash tools/test-setup-image.sh)",
-      "Bash(bash tools/test-setup-image-all.sh)",
-      "Bash(command -v *)"
+      "Bash(python3 dgb.py test)",
+      "Bash(python3 dgb.py test *)",
+      "Bash(command -v *)",
+      "Bash(python3 dgb.py doctor)",
+      "Bash(python3 dgb.py build)"
     ]
   }
 }

@@ -33,7 +33,7 @@ def write_game_txt(folder: Path, meta: dict) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     order = ["title", "year", "genre", "publisher", "exe", "setup", "note"]
     lines = [
-        "# DOS Game Browser metadata — edit freely, then re-run scan-games.py",
+        "# DOS Game Browser metadata - edit freely, then re-run the scan",
         "",
     ]
     for k in order:
