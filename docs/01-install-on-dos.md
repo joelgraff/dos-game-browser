@@ -31,6 +31,17 @@ COPY A:\UTILS\*.*  C:\DGB\UTILS
 
 `C:\DGB` is only a suggestion. Anywhere on a writable drive is fine.
 
+What you just copied, about 17 KB in all:
+
+| File | Role |
+|------|------|
+| `BROWSER.COM` | The launcher: reads `GAMES.LST`, runs games |
+| `SCAN.COM` | Builds `GAMES.LST` — step 4 below |
+| `START.BAT` | Loads the abort TSR, then loops the browser |
+| `UTILS\ABORT.COM` | TSR: **F12** force-exits a stuck game |
+| `UTILS\VDETECT.COM` | Optional video detection |
+| `INSTALL.TXT` | These instructions, readable with `TYPE` |
+
 ## 3. Put your games somewhere
 
 One directory per game:

@@ -45,8 +45,9 @@ python dgb.py samples --dest /mnt/dos/GAMES
 python dgb.py install --image-root /mnt/dos
 ```
 
-That copies the launcher into `/mnt/dos/DGB`, scans `/mnt/dos/GAMES`, and writes
-`GAMES.LST` and `DGB.CFG`.
+That copies the launcher into `/mnt/dos/DGB` (the files are listed in
+[guide 1](01-install-on-dos.md#2-copy-it-onto-the-dos-machine)), scans
+`/mnt/dos/GAMES`, and writes `GAMES.LST` and `DGB.CFG`.
 
 ```
 DOS Game Browser setup
