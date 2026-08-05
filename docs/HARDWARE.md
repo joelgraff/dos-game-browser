@@ -1,4 +1,8 @@
-# Deploying to real DOS hardware
+# Real hardware notes
+
+Media, memory and video specifics. For the step-by-step, see
+[Install on DOS](01-install-on-dos.md) or
+[Prepare an image](02-prepare-image.md).
 
 The launcher is developed and smoke-tested under **DOSBox / DOSBox Staging**. The supported production target is **original IBM PC–compatible hardware** running MS-DOS 5.x/6.x (or FreeDOS).
 
@@ -6,7 +10,7 @@ The launcher is developed and smoke-tested under **DOSBox / DOSBox Staging**. Th
 
 | Role | Machine | Work done here |
 |------|---------|----------------|
-| **Host** | Modern Linux/macOS/Windows | Assemble binaries, fetch games, edit `GAME.TXT`, run `scan-games.py`, stage media |
+| **Host** | Modern Linux/macOS/Windows | Assemble binaries, fetch games, edit `GAME.TXT`, scan, stage media |
 | **Target** | 8086–Pentium DOS PC | Boot DOS, run `START.BAT` / `BROWSER.COM` only |
 
 Never rely on long filenames, Unicode, or a network stack on the target.
@@ -64,7 +68,7 @@ Not every protected-mode or DPMI title will unwind cleanly; still better than a 
 
 ```bash
 `python dgb.py build`
-python tools/fetch-samples.py --only HELLOWOR
+python dgb.py samples --dest <games-dir> --only HELLOWOR
 python dgb.py scan --games-root <games> --launcher-dir <launcher>
 python dgb.py run
 ```
