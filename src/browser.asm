@@ -2536,7 +2536,7 @@ r_pub           times PLEN+1 db 0
 r_note          times NLEN+1 db 0
 
 s_title         db 'DOS Game Browser',0
-s_keys          db 'Arrows  Enter=Play  Shift+Esc=Quit',0
+s_keys          db 'Arrows move  Enter=Play',0   ; Shift+Esc is deliberately not shown
 s_abort         db 'F12 or CTRL+ALT+BKSP exits game',0
 s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0

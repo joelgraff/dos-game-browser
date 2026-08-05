@@ -552,7 +552,7 @@ EOF
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=NO"
 
-  # With the TSR resident the thief must STILL keep it -- we do not steal back.
+  # Default (no /W): the thief must STILL keep it -- we do not steal back.
   d="$WORK/wd-tsr"; mkdir -p "$d/UTILS"
   cp "$WORK/STEAL.COM" "$d/"; cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
   cat > "$d/T.CONF" <<EOF
@@ -568,6 +568,24 @@ EOF
   ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
   out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
   expect abort-watchdog "$out" "WATCHDOG=NO"
+
+  # With /W the vector must come back -- the opt-in escape hatch for games
+  # that seize the keyboard.
+  d="$WORK/wd-optin"; mkdir -p "$d/UTILS"
+  cp "$WORK/STEAL.COM" "$d/"; cp "$ABORT_COM" "$d/UTILS/ABORT.COM"
+  cat > "$d/T.CONF" <<EOF
+[sdl]
+autolock=false
+[autoexec]
+mount c $d
+c:
+UTILS\\ABORT.COM /W
+STEAL.COM > OUT.TXT
+exit
+EOF
+  ( cd "$d" && SDL_VIDEODRIVER=dummy timeout 60 "$DOSBOX" -conf "$d/T.CONF" -noconsole >/dev/null 2>&1 ) || true
+  out="$(tr -d '\r' < "$d/OUT.TXT" 2>/dev/null || true)"
+  expect abort-watchdog "$out" "WATCHDOG=YES"
 fi
 
 if ! skip_case "abort-absent"; then

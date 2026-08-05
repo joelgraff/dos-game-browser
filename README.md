@@ -154,6 +154,9 @@ Controls in the browser:
 straight away — deliberately, so a booth cannot be dropped to a DOS prompt by a
 stray keypress. Use **Shift+Esc** to leave the loop for real.
 
+Shift+Esc is intentionally **not** shown anywhere in the UI: on a public booth
+the way out should not be discoverable by visitors.
+
 Ctrl+Alt+Esc does the same thing but only works on real hardware: desktop window
 managers grab that combination for themselves, so under DOSBox it never reaches
 DOS and just unfocuses the window. Once at the DOS prompt, `exit` closes DOSBox;
@@ -196,10 +199,28 @@ C:\DGB> BROWSER.COM /T > TEST.TXT
 `KBD scancodes=0` means the game owned the keyboard outright and the TSR was
 never called.
 
-Taking the vector back from a timer tick was tried and reverted: it put the TSR
-in front of a game that expects exclusive keyboard control and stopped Keen from
-starting at all. A dead hotkey in a few games is a much better outcome than a
-game that will not launch.
+##### Trying to beat the lockout: `ABORT.COM /W`
+
+There is one way to get the hotkey working in such games: watch the interrupt
+vector from the timer and take it back whenever a game grabs it. This is
+available but **off by default**:
+
+```bat
+IF EXIST UTILS\ABORT.COM UTILS\ABORT.COM /W
+```
+
+With `/W`, `ABORT.COM` checks 18 times a second whether INT 09h still points at
+it, and if not, chains to whatever took it and moves back in front.
+
+It is opt-in because it is genuinely risky: it puts our handler ahead of a game
+that expects exclusive keyboard control, and we read port 60h before the game
+does. This was first shipped on by default and looked like it stopped Commander
+Keen from starting; that turned out to be a memory problem, since fixed, but the
+risk is real and per-game. Try it, and if a game misbehaves drop the `/W`.
+
+Use `BROWSER.COM /T` to see whether it is helping: the scancode counter is zeroed
+when a game launches, so a non-zero reading afterwards means the handler is being
+called during the game.
 
 ### Diagnosing path problems on the target machine
 

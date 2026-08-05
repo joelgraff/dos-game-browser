@@ -10,7 +10,11 @@
 ; Safe for real 8086/286/386 MS-DOS and DOSBox. Calls DOS only when InDOS
 ; is clear (or via INT 28h idle). Chains prior INT 09h / INT 28h handlers.
 ;
-; LIMITATION: games that install their own INT 09h handler and never chain
+; ABORT.COM /W enables a timer watchdog that takes INT 09h back from games that
+; seize it. Off by default: it puts this handler in front of a game that expects
+; exclusive keyboard control, which is a real risk. Try it per-game.
+;
+; LIMITATION (without /W): games that install their own INT 09h handler and never chain
 ; (Commander Keen, Digger Remastered, ...) never call this handler, so the
 ; hotkey cannot work in them. In Keen the chord works on the splash screen and
 ; dies the instant the game starts -- that is when it takes the vector. Stealing the vector back from a timer tick was
@@ -41,6 +45,31 @@ SC_F12          equ     58h             ; 101-key F12; no E0 prefix
 start:
         push    cs
         pop     ds
+
+        ; /W enables the keyboard-vector watchdog (see the header notes).
+        mov     byte [watchdog], 0
+        xor     cx, cx
+        mov     cl, [80h]               ; PSP command tail length
+        or      cl, cl
+        jz      .noargs
+        mov     si, 81h
+.scan:  mov     al, [si]
+        cmp     al, '/'
+        je      .sw
+        cmp     al, '-'
+        jne     .next
+.sw:    cmp     cx, 1
+        jbe     .noargs
+        mov     al, [si+1]
+        or      al, 20h
+        cmp     al, 'w'
+        jne     .next
+        mov     byte [watchdog], 1
+        jmp     .noargs
+.next:  inc     si
+        dec     cx
+        jnz     .scan
+.noargs:
 
         ; Already installed? INT 2Fh multiplex signature
         mov     ax, 0AB00h
@@ -89,6 +118,17 @@ start:
         mov     dx, int28
         int     21h
 
+        cmp     byte [watchdog], 0
+        je      .no_wd
+        mov     ax, 3508h               ; remember the timer chain
+        int     21h
+        mov     [old08], bx
+        mov     [old08+2], es
+        mov     ax, 2508h
+        mov     dx, int08
+        int     21h
+.no_wd:
+
         mov     ax, 252Fh
         mov     dx, int2f
         int     21h
@@ -96,6 +136,12 @@ start:
         mov     dx, msg_ok
         mov     ah, 09h
         int     21h
+        cmp     byte [watchdog], 0
+        je      .banner_done
+        mov     dx, msg_wd
+        mov     ah, 09h
+        int     21h
+.banner_done:
 
         ; TSR: keep through end of resident block
         mov     dx, resident_end
@@ -111,6 +157,8 @@ start:
 
 old09           dd      0               ; current chain target (may be a game's)
 orig09          dd      0               ; handler present when we installed
+old08           dd      0               ; only used when the watchdog is on
+watchdog        db      0               ; 1 = /W given
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -247,6 +295,48 @@ int09:
         jmp     far [cs:old09]
 
 ;------------------------------------------------------------------------------
+; INT 08h — timer. Keyboard-vector watchdog (only hooked when /W is given).
+;
+; Games that install their own INT 09h and never chain stop calling us, and the
+; hotkey goes dead. Eighteen times a second, check whether INT 09h still points
+; here; if not, adopt whatever took it as the chain target and get back in front.
+;
+; The vector table is edited directly because INT 21h is not safe to call from a
+; timer interrupt.
+;------------------------------------------------------------------------------
+int08:
+        pushf
+        call    far [cs:old08]          ; keep system timing intact first
+
+        push    ax
+        push    bx
+        push    dx
+        push    ds
+
+        mov     dx, cs
+        xor     ax, ax
+        mov     ds, ax
+        mov     ax, [24h]               ; INT 09h offset
+        mov     bx, [26h]               ; INT 09h segment
+        cmp     bx, dx
+        jne     .grab
+        cmp     ax, int09
+        je      .out
+.grab:
+        mov     [cs:old09], ax
+        mov     [cs:old09+2], bx
+        cli
+        mov     word [24h], int09
+        mov     [26h], dx
+        sti
+.out:
+        pop     ds
+        pop     dx
+        pop     bx
+        pop     ax
+        iret
+
+;------------------------------------------------------------------------------
 ; Point INT 09h back at us, chaining to the handler that existed at install.
 ; Used before terminating a game (whose handler is about to be freed) and via
 ; INT 2Fh AB01h, which BROWSER.COM calls after a game exits normally.
@@ -357,3 +447,4 @@ resident_end:
 ;------------------------------------------------------------------------------
 msg_ok          db      'ABORT resident: F12 or Ctrl+Alt+Backspace force-exits game.',13,10,'$'
 msg_already     db      'ABORT already installed.',13,10,'$'
+msg_wd          db      'Watchdog on: reclaiming INT 09h from games.',13,10,'$'
