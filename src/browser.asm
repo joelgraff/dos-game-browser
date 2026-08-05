@@ -2294,6 +2294,12 @@ selftest:
         call    cpy
         pop     ax
         call    putdec
+        mov     si, st_kbdtick
+        call    cpy
+        mov     ax, 0AB06h
+        int     2Fh                     ; BX = watchdog ticks
+        mov     ax, bx
+        call    putdec
         xor     al, al
         stosb
         mov     si, outbuf
@@ -2596,6 +2602,7 @@ st_kbdarm       db ' armed=',0
 st_kbdpend      db ' pend=',0
 st_kbdblk       db ' busydos=',0
 st_kbdmask      db ' irq1off=',0
+st_kbdtick      db ' wdticks=',0
 st_fdir         db ' DIR=',0
 st_fexe         db ' EXE=',0
 st_fyear        db ' YEAR=',0

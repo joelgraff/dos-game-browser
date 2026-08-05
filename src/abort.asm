@@ -166,6 +166,9 @@ indos_blk       dw      0               ; times an abort was recognised but DOS
 irq1_off        dw      0               ; timer ticks seen with IRQ1 masked at
                                         ; the PIC (a game polling the keyboard
                                         ; itself); needs /W to be sampled
+wd_ticks        dw      0               ; timer ticks our watchdog actually ran.
+                                        ; Zero means the game owns INT 08h too,
+                                        ; which makes the other two meaningless.
 old28           dd      0
 old2f           dd      0
 indos_off       dw      0
@@ -195,6 +198,8 @@ int2f:
         je      .stop
         cmp     ax, 0AB05h              ; mark spent (as a real abort does)
         je      .spend
+        cmp     ax, 0AB06h              ; watchdog tick count
+        je      .ticks
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
@@ -211,11 +216,16 @@ int2f:
         mov     word [cs:wd_grabs], 0
         mov     word [cs:indos_blk], 0
         mov     word [cs:irq1_off], 0
+        mov     word [cs:wd_ticks], 0
         mov     byte [cs:counting], 1
         mov     al, 0ABh
         iret
 .stop:                                  ; AB04h: stop, so the reading is frozen
         mov     byte [cs:counting], 0
+        mov     al, 0ABh
+        iret
+.ticks:                                 ; AB06h: BX = watchdog ticks
+        mov     bx, [cs:wd_ticks]
         mov     al, 0ABh
         iret
 .spend:                                 ; AB05h: leave the hotkey disarmed, the
@@ -356,10 +366,12 @@ int08:
         push    dx
         push    ds
 
-        ; Is the game polling the keyboard with IRQ1 masked off? If so no
-        ; keyboard interrupt happens at all and no handler can see keys.
         cmp     byte [cs:counting], 0
         je      .nomask
+        inc     word [cs:wd_ticks]      ; prove the watchdog is running at all
+
+        ; Is the game polling the keyboard with IRQ1 masked off? If so no
+        ; keyboard interrupt happens at all and no handler can see keys.
         in      al, 21h                 ; PIC 1 interrupt mask
         test    al, 02h                 ; bit 1 = IRQ1 (keyboard)
         jz      .nomask
