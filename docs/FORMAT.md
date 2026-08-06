@@ -111,6 +111,24 @@ the scanner says so and skips the file.
 GAMES_ROOT=\GAMES
 ```
 
+| Key | Meaning |
+|-----|---------|
+| `GAMES_ROOT` | DOS root used to resolve `dir` values from `GAMES.LST` |
+| `ABORT_KEY` | The single-key force exit. `F1`–`F12`, or a raw make-code in hex |
+
+```ini
+GAMES_ROOT=\GAMES
+ABORT_KEY=F11
+```
+
+`ABORT_KEY` defaults to `F12`. Set it when a game wants that key for play — an
+unrecognised value falls back to the default rather than guessing. `ABORT.COM`
+reads it before going resident, so it costs nothing at runtime, and
+`ABORT.COM /K:F11` overrides it for a single run.
+
+Both scanners preserve settings they do not own when they rewrite this file, so
+a hand-edited `ABORT_KEY` survives a re-scan.
+
 - `GAMES_ROOT` is the DOS root used to resolve `dir` values from `GAMES.LST`.
 - If missing, launcher defaults preserve legacy behavior (`GAMES\` and `\GAMES\` fallback).
 

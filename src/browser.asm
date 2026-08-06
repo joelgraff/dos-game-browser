@@ -220,13 +220,81 @@ set_text_mode:
 ;------------------------------------------------------------------------------
 detect_abort:
         push    ax
+        push    bx
+        push    si
+        push    di
         mov     byte [abort_res], 0
+
+        mov     di, s_abort             ; default until the TSR says otherwise
+        mov     si, s_abort_def
+        call    cpy
+        xor     al, al
+        stosb
+
         mov     ax, 0AB00h
         int     2Fh
         cmp     al, 0ABh
         jne     .da_done
         mov     byte [abort_res], 1
+
+        ; Which key is it watching? It is configurable, so the header must not
+        ; claim F12 when DGB.CFG says otherwise.
+        mov     ax, 0AB07h
+        int     2Fh
+        cmp     al, 0ABh
+        jne     .da_done
+        mov     [abort_scan], bl
+        call    build_abort_hint
 .da_done:
+        pop     di
+        pop     si
+        pop     bx
+        pop     ax
+        ret
+
+; build_abort_hint - render "F11 exits game" (or "KEY 5B exits game") into
+; s_abort, from the scancode the TSR reported.
+build_abort_hint:
+        push    ax
+        push    bx
+        push    cx
+        push    si
+        push    di
+
+        mov     di, s_abort
+        mov     al, [abort_scan]
+
+        ; F1..F12 have well-known names; anything else prints as a code.
+        mov     bx, 0
+.bl:    cmp     bx, 12
+        jae     .raw
+        mov     ah, [fkey_codes + bx]
+        cmp     ah, al
+        je      .named
+        inc     bx
+        jmp     .bl
+
+.named: mov     al, 'F'
+        stosb
+        mov     ax, bx
+        inc     ax
+        call    putdec
+        jmp     .tail
+
+.raw:   mov     si, s_keyword
+        call    cpy
+        mov     al, [abort_scan]
+        call    hexbyte
+
+.tail:  mov     si, s_exits
+        call    cpy
+        xor     al, al
+        stosb
+
+        pop     di
+        pop     si
+        pop     cx
+        pop     bx
         pop     ax
         ret
 
@@ -2241,6 +2309,10 @@ selftest:
         mov     [st_ch], al
         mov     si, st_ch
         call    sout
+        mov     si, st_key
+        call    sout
+        mov     si, s_abort             ; exactly what the header will show
+        call    sout
         call    soutnl
 
         ; What has the TSR's keyboard handler actually seen? Zero scancodes
@@ -2576,7 +2648,12 @@ r_note          times NLEN+1 db 0
 
 s_title         db 'DOS Game Browser',0
 s_keys          db 'Arrows move  Enter=Play',0   ; Shift+Esc is deliberately not shown
-s_abort         db 'F12 or CTRL+ALT+BKSP exits game',0
+s_abort         times 40 db 0           ; built by build_abort_hint
+s_abort_def     db 'F12 or CTRL+ALT+BKSP exits game',0
+s_keyword       db 'KEY ',0
+s_exits         db ' or CTRL+ALT+BKSP exits game',0
+fkey_codes      db 3Bh,3Ch,3Dh,3Eh,3Fh,40h,41h,42h,43h,44h,57h,58h
+abort_scan      db 58h
 s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0
 s_hdr           db '(category header)',0
@@ -2594,6 +2671,7 @@ st_pfxa         db 'PFXABS=',0
 st_nent         db 'NENT=',0
 st_lstfail      db 'LST=FAIL',0
 st_abort        db 'ABORT=',0
+st_key          db ' HINT=',0
 st_kbd          db 'KBD scancodes=',0
 st_kbdlast      db ' last=',0
 st_kbdflags     db ' ctrlalt=',0

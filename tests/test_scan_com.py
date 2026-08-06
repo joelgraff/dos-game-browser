@@ -109,6 +109,26 @@ class ScanComParityTest(TempDirTest):
             make_game(g / n, f"{n}.EXE")
         self.assertEqual(self.assert_parity(self.tmp), 4)
 
+    def test_existing_dgb_cfg_settings_survive_a_rescan(self):
+        """
+        SCAN.COM rewrites DGB.CFG, and ABORT_KEY is edited by hand on this very
+        machine. Losing it on the next scan would be silent and infuriating.
+        """
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir(parents=True, exist_ok=True)
+        (dgb / "DGB.CFG").write_bytes(
+            b"; old\r\nGAMES_ROOT=\\OLD\r\nABORT_KEY=F11\r\nSOMETHING=42\r\n")
+        shutil.copy2(self.scan_com, dgb / "SCAN.COM")
+        run_dosbox(self.tmp, ["cd \\DGB", "SCAN.COM C:\\GAMES > OUT.TXT"])
+
+        cfg = (dgb / "DGB.CFG").read_bytes().decode("ascii", "replace")
+        self.assertIn("GAMES_ROOT=\\GAMES", cfg)
+        self.assertIn("ABORT_KEY=F11", cfg)
+        self.assertIn("SOMETHING=42", cfg)
+        self.assertNotIn("OLD", cfg)
+
     def test_directory_names_are_title_cased_identically(self):
         """Python's str.title() treats digits as word boundaries: 2FAST4YO -> 2Fast4Yo."""
         g = self.tmp / "GAMES"

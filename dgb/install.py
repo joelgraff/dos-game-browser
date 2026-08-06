@@ -74,21 +74,26 @@ def install_launcher(
 
 def run_scanner(args: argparse.Namespace, image_root: Path, scan_root: Path,
                 launcher_dir: Path) -> int:
-    """Call the scanner directly; it is a module now, not a separate script."""
-    ns = argparse.Namespace(
-        games_root=scan_root,
-        launcher_dir=launcher_dir,
-        out=None,
-        image_root=image_root,
-        games_root_dos=None,
-        sort=args.sort,
-        no_headers=args.no_headers,
-        no_cfg=False,
-        apply_catalog=False,
-        catalog=scan_mod.CATALOG,
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
+    """
+    Call the scanner directly; it is a module now, not a separate script.
+
+    Its defaults are taken from its own parser rather than restated here, so
+    adding a scanner option cannot break install by leaving an attribute unset.
+    """
+    parser = argparse.ArgumentParser()
+    scan_mod.add_arguments(parser)
+    ns = parser.parse_args([
+        "--games-root", str(scan_root),
+        "--launcher-dir", str(launcher_dir),
+        "--image-root", str(image_root),
+    ])
+    ns.sort = args.sort
+    ns.no_headers = args.no_headers
+    ns.dry_run = args.dry_run
+    ns.verbose = args.verbose
+    if getattr(args, "abort_key", None):
+        ns.abort_key = args.abort_key
+
     sys.stdout.flush()
     return scan_mod.run(ns)
 
@@ -113,6 +118,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--dry-run", action="store_true", help="Show actions without writing files")
     ap.add_argument("--no-install", action="store_true", help="Skip copying launcher files")
     ap.add_argument("--no-scan", action="store_true", help="Skip scan and only install launcher files")
+    ap.add_argument("--abort-key",
+                    help="Force-exit key written to DGB.CFG: F1-F12, or a hex "
+                         "scancode. Left alone if not given.")
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
     ap.add_argument(

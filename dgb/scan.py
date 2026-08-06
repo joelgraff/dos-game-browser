@@ -509,18 +509,47 @@ def build_index(records: list[Record], sort: str, headers: bool) -> list[str]:
     return lines
 
 
-def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool) -> Path:
+def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool,
+                      abort_key: str | None = None) -> Path:
     """
     Write DGB.CFG. games_root_dos is supplied by the caller - it is never
     inferred from host directory layout, which cannot be done reliably.
+
+    Settings we do not own are carried across. ABORT_KEY in particular is
+    edited by hand on the DOS machine, and rewriting the file wholesale used
+    to delete it on the next scan without saying anything.
     """
     root = "\\" + games_root_dos.replace("/", "\\").strip("\\")
+    out = launcher_dir / "DGB.CFG"
+
+    ours = {"games_root"}
+    if abort_key is not None:
+        ours.add("abort_key")
+
+    preserved: list[str] = []
+    if out.is_file():
+        existing = out.read_bytes().decode("ascii", "replace")
+        for line in existing.replace("\r", "").split("\n"):
+            stripped = line.strip()
+            if not stripped or stripped[0] in ";#":
+                continue                    # our header is rewritten below
+            key = stripped.split("=", 1)[0].strip().lower()
+            if key in ours:
+                continue                    # we are about to write it
+            preserved.append(stripped)
+
     lines = [
         "; DOS Game Browser runtime config",
         "; GAMES_ROOT is the DOS path the launcher resolves game dirs against.",
         f"GAMES_ROOT={root}",
     ]
-    out = launcher_dir / "DGB.CFG"
+    if abort_key is not None:
+        lines += [
+            "; ABORT_KEY is the single-key force exit: F1-F12, or a hex scancode.",
+            f"ABORT_KEY={abort_key}",
+        ]
+    lines += preserved
+
     if not dry_run:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("\r\n".join(lines) + "\r\n", encoding="ascii", errors="replace")
@@ -572,6 +601,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
         "--games-root-dos",
         help="DOS path of the games tree, e.g. \\GAMES (overrides --image-root)",
     )
+    ap.add_argument("--abort-key",
+                    help="Force-exit key written to DGB.CFG: F1-F12, or a hex "
+                         "scancode. Left alone if not given.")
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
     ap.add_argument(
@@ -659,7 +691,8 @@ def run(args: argparse.Namespace) -> int:
     if args.no_cfg:
         pass
     elif games_root_dos:
-        cfg = write_browser_cfg(launcher_dir, games_root_dos, args.dry_run)
+        cfg = write_browser_cfg(launcher_dir, games_root_dos, args.dry_run,
+                                abort_key=args.abort_key)
         print(f"{verb} runtime config -> {cfg} (GAMES_ROOT=\\{games_root_dos.strip(chr(92))})")
     else:
         print(

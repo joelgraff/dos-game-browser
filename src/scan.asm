@@ -932,6 +932,100 @@ write_lst:
         pop     ax
         ret
 
+; keep_cfg_lines — read DGB.CFG into cfgkeep, dropping comments and the
+; GAMES_ROOT line we are about to rewrite. Everything else is carried across:
+; ABORT_KEY is edited by hand here, and rewriting the file wholesale would
+; delete it on the next scan without saying so.
+keep_cfg_lines:
+        push    ax
+        push    bx
+        push    cx
+        push    dx
+        push    si
+        push    di
+
+        mov     byte [cfgkeep], 0
+        mov     ax, 3D00h
+        mov     dx, cfg_name
+        int     21h
+        jc      .out
+        mov     bx, ax
+
+        push    bx
+        mov     ah, 3Fh
+        mov     cx, CFGBUF_MAX
+        mov     dx, cfgbuf
+        int     21h
+        pop     bx
+        jc      .close
+        mov     si, cfgbuf
+        add     si, ax
+        mov     byte [si], 0
+.close:
+        mov     ah, 3Eh
+        int     21h
+
+        mov     si, cfgbuf
+        mov     di, cfgkeep
+.line:  cmp     byte [si], 0
+        je      .done
+        mov     bx, si                  ; start of this line
+
+        ; comment or blank?
+        mov     al, [si]
+        cmp     al, ';'
+        je      .skip
+        cmp     al, '#'
+        je      .skip
+        cmp     al, 13
+        je      .skip
+        cmp     al, 10
+        je      .skip
+
+        push    si
+        push    di
+        mov     di, cfg_key             ; "GAMES_ROOT="
+        call    match_lit
+        pop     di
+        pop     si
+        jc      .skip                   ; ours; we rewrite it
+
+        ; copy the line through, terminating at CR/LF
+.cp:    mov     al, [si]
+        cmp     al, 0
+        je      .eol
+        cmp     al, 13
+        je      .eol
+        cmp     al, 10
+        je      .eol
+        mov     [di], al
+        inc     di
+        inc     si
+        jmp     .cp
+.eol:   mov     byte [di], 13
+        inc     di
+        mov     byte [di], 10
+        inc     di
+        mov     byte [di], 0
+
+.skip:  mov     si, bx                  ; advance to the next line
+.adv:   mov     al, [si]
+        cmp     al, 0
+        je      .done
+        inc     si
+        cmp     al, 10
+        je      .line
+        jmp     .adv
+.done:
+.out:
+        pop     di
+        pop     si
+        pop     dx
+        pop     cx
+        pop     bx
+        pop     ax
+        ret
+
 ; write_cfg — DGB.CFG recording where the games are, drive letter stripped.
 write_cfg:
         push    ax
@@ -940,6 +1034,8 @@ write_cfg:
         push    dx
         push    si
         push    di
+
+        call    keep_cfg_lines          ; before we truncate it
 
         mov     ah, 3Ch
         xor     cx, cx
@@ -972,6 +1068,9 @@ write_cfg:
         stosb
         mov     byte [di], 0
         mov     si, linebuf
+        call    out_str
+
+        mov     si, cfgkeep             ; settings we do not own
         call    out_str
 
         mov     ah, 3Eh
@@ -1119,6 +1218,34 @@ stricmp:
 .before:
         pop     di
         pop     si
+        pop     bx
+        pop     ax
+        clc
+        ret
+
+; match_lit — DI = literal, SI = text. CF=1 and SI advanced on a
+; case-insensitive match; SI is left alone otherwise.
+match_lit:
+        push    ax
+        push    bx
+        push    si
+.m1:    mov     al, [di]
+        cmp     al, 0
+        je      .ok
+        mov     bl, [si]
+        or      al, 20h
+        or      bl, 20h
+        cmp     bl, al
+        jne     .bad
+        inc     si
+        inc     di
+        jmp     .m1
+.ok:    add     sp, 2                   ; keep the advanced SI
+        pop     bx
+        pop     ax
+        stc
+        ret
+.bad:   pop     si
         pop     bx
         pop     ax
         clc
@@ -1415,6 +1542,9 @@ tmprec          times REC_SIZE db 0
 
 GBUF_MAX        equ 512
 gbuf            times GBUF_MAX+2 db 0
+CFGBUF_MAX      equ 512
+cfgbuf          times CFGBUF_MAX+2 db 0
+cfgkeep         times CFGBUF_MAX+2 db 0
 
 dta_table       times (MAX_DEPTH+1)*DTA_SIZE db 0
 dta_pick        times DTA_SIZE db 0

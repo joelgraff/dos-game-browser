@@ -394,6 +394,39 @@ msg_spent db 'ARMED=0',13,10,'$'
         # loading the TSR must not stop the batch before the browser runs
         self.assertIn("NENT=2", out)
 
+    def test_abort_key_is_configurable(self):
+        """
+        A game may want F12 for play, so the trigger is settable in DGB.CFG.
+        Bad values fall back to the default rather than picking something
+        arbitrary - "banana" was once read as scancode BAh.
+        """
+        cases = [
+            ("default", None, "F12"),
+            ("F11", "ABORT_KEY=F11\r\n", "F11"),
+            ("F1", "ABORT_KEY=F1\r\n", "F1"),
+            ("lowercase", "abort_key=f11\r\n", "F11"),
+            ("raw hex", "ABORT_KEY=5B\r\n", "KEY 5B"),
+            ("commented out first", "; ABORT_KEY=F1\r\nABORT_KEY=F11\r\n", "F11"),
+            ("trailing comment", "ABORT_KEY=F11 ; why\r\n", "F11"),
+            ("not a key", "ABORT_KEY=banana\r\n", "F12"),
+            ("out of range", "ABORT_KEY=F13\r\n", "F12"),
+            ("trailing rubbish", "ABORT_KEY=5BX\r\n", "F12"),
+        ]
+        for i, (name, cfg, expected) in enumerate(cases):
+            with self.subTest(name):
+                d = self.fixture(f"key{i}", "H|Action", GAME_LINE, cfg=cfg)
+                (d / "UTILS").mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.abort, d / "UTILS" / "ABORT.COM")
+                out = self.dump(d, ["UTILS\\ABORT.COM"])
+                self.assertIn(f"HINT={expected} or CTRL+ALT+BKSP exits game", out)
+
+    def test_abort_key_command_line_overrides_the_config(self):
+        d = self.fixture("keyarg", "H|Action", GAME_LINE, cfg="ABORT_KEY=F11\r\n")
+        (d / "UTILS").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.abort, d / "UTILS" / "ABORT.COM")
+        out = self.dump(d, ["UTILS\\ABORT.COM /K:F9"])
+        self.assertIn("HINT=F9 or CTRL+ALT+BKSP exits game", out)
+
     def test_absent_tsr_is_reported(self):
         out = self.dump(self.fixture("abortabsent"))
         self.assertIn("ABORT=0", out)

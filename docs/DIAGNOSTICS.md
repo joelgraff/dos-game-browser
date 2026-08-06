@@ -91,12 +91,21 @@ If a game still runs out:
 games read the keyboard hardware directly and never generate an interrupt, and
 no hotkey can reach us in those.
 
-First check it is loaded at all — `ABORT=1` in the self-test. `START.BAT` loads
-it, but only if `UTILS\ABORT.COM` is present.
+First check it is loaded at all, and which key it is watching — the self-test
+reports both:
 
-Then play the game, press F12 a few times, quit normally, and run the self-test.
-The counters are reset when a game starts and frozen when it exits, so the `KBD`
-line describes that session and nothing else:
+```
+ABORT=1 HINT=F11 or CTRL+ALT+BKSP exits game
+```
+
+`HINT` is exactly what the browser's header shows. If it names a different key
+than the one you are pressing, `ABORT_KEY` in `DGB.CFG` is set to that one.
+`ABORT=0` means the TSR is not resident at all: `START.BAT` loads it, but only
+if `UTILS\ABORT.COM` is present.
+
+Then play the game, press the abort key a few times, quit normally, and run the
+self-test. The counters are reset when a game starts and frozen when it exits,
+so the `KBD` line describes that session and nothing else:
 
 | Reading | Meaning |
 |---------|---------|

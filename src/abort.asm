@@ -2,7 +2,18 @@
 ; ABORT.COM — Resident force-exit hotkey for kiosk / booth use
 ;
 ; Installs as a TSR. While a game is running under the browser:
-;   F12, or Ctrl + Alt + Backspace  →  terminate current process
+;   The abort key (F12 by default), or Ctrl + Alt + Backspace
+;                                   →  terminate current process
+;
+; The single key is configurable, because a game may want F12 for play. Put
+; ABORT_KEY in DGB.CFG next to BROWSER.COM:
+;
+;   ABORT_KEY=F11        F1 to F12 by name
+;   ABORT_KEY=5B         or any raw make-code, in hex
+;
+; ABORT.COM /K:F11 overrides it for one run. The key table, the parser and the
+; config reader all sit below resident_end and are discarded when the TSR
+; installs, so the whole feature costs about 65 resident bytes.
 ;
 ; F12 needs no modifier, so it still works when a game's own keyboard handler
 ; has left the Ctrl/Alt state inconsistent.
@@ -41,7 +52,7 @@ KF_CTRL         equ     04h
 KF_ALT          equ     08h
 ; Make code for Backspace is 0Eh; break is 8Eh
 SC_BACKSPACE    equ     0Eh
-SC_F12          equ     58h             ; 101-key F12; no E0 prefix
+SC_F12          equ     58h             ; 101-key F12; no E0 prefix, the default
 
 start:
         push    cs
@@ -63,14 +74,37 @@ start:
         jbe     .noargs
         mov     al, [si+1]
         or      al, 20h
+        cmp     al, 'k'
+        je      .keyarg
         cmp     al, 'w'
         jne     .next
         mov     byte [watchdog], 1
-        jmp     .noargs
+        jmp     .next
+.keyarg:
+        ; /K:F11 or /K=5B - overrides DGB.CFG for this run
+        push    si
+        add     si, 2
+        cmp     byte [si], ':'
+        je      .keyskip
+        cmp     byte [si], '='
+        jne     .keybad
+.keyskip:
+        inc     si
+        call    parse_key
+        jc      .keybad
+        mov     [abort_key], al
+        mov     byte [key_from_arg], 1
+.keybad:
+        pop     si
+        jmp     .next
 .next:  inc     si
         dec     cx
         jnz     .scan
 .noargs:
+        cmp     byte [key_from_arg], 0
+        jne     .key_done
+        call    read_cfg_key            ; ABORT_KEY= in DGB.CFG, if present
+.key_done:
 
         ; Already installed? INT 2Fh multiplex signature
         mov     ax, 0AB00h
@@ -179,6 +213,7 @@ busy            db      0               ; set while terminating; cleared by
                                         ; INT 2Fh AB01h/AB03h when the browser
                                         ; regains control. Without that the
                                         ; hotkey only ever fires once.
+abort_key       db      SC_F12          ; the configured single-key trigger
 kf_own          db      0               ; Ctrl/Alt tracked from scancodes
 sc_count        dw      0               ; scancodes seen (diagnostic)
 sc_last         db      0               ; last scancode seen (diagnostic)
@@ -201,6 +236,8 @@ int2f:
         je      .spend
         cmp     ax, 0AB06h              ; watchdog tick count
         je      .ticks
+        cmp     ax, 0AB07h              ; which key is the abort key
+        je      .whichkey
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
@@ -227,6 +264,10 @@ int2f:
         iret
 .ticks:                                 ; AB06h: BX = watchdog ticks
         mov     bx, [cs:wd_ticks]
+        mov     al, 0ABh
+        iret
+.whichkey:                              ; AB07h: BL = the configured scancode
+        mov     bl, [cs:abort_key]
         mov     al, 0ABh
         iret
 .spend:                                 ; AB05h: leave the hotkey disarmed, the
@@ -299,10 +340,9 @@ int09:
         and     byte [cs:kf_own], 0F7h
         jmp     .chain
 .nc4:
-        ; F12 fires on its own. Old DOS games predate the 101-key layout and
-        ; almost never use it, and needing no modifier means it still works if a
-        ; game's own handler has mangled the Ctrl/Alt state.
-        cmp     al, SC_F12
+        ; The configured key fires on its own. Needing no modifier means it
+        ; still works when a game's own handler has mangled the Ctrl/Alt state.
+        cmp     al, [cs:abort_key]
         je      .hit
 
         cmp     al, SC_BACKSPACE
@@ -518,8 +558,263 @@ try_abort:
 resident_end:
 
 ;------------------------------------------------------------------------------
-; Transient messages (not kept after TSR)
+; Transient: parsing helpers and messages. Everything below resident_end runs
+; during installation and is then discarded, so it costs file size only.
 ;------------------------------------------------------------------------------
+; parse_key - SI = text, returns AL = make-code. CF=1 if unrecognised.
+; Accepts F1..F12 by name, or a one or two digit hex make-code. The whole
+; token must be consumed, so "banana" is rejected rather than read as BAh.
+parse_key:
+        push    bx
+        push    cx
+        push    dx
+        push    si
+
+        mov     al, [si]
+        or      al, 20h
+        cmp     al, 'f'
+        jne     .hex
+
+        inc     si
+        xor     cx, cx
+        xor     bx, bx                  ; digit count
+.fdig:  mov     al, [si]
+        cmp     al, '0'
+        jb      .fdone
+        cmp     al, '9'
+        ja      .fdone
+        sub     al, '0'
+        mov     dx, cx
+        add     cx, cx                  ; x2
+        add     cx, cx                  ; x4
+        add     cx, dx                  ; x5
+        add     cx, cx                  ; x10
+        xor     ah, ah
+        add     cx, ax
+        inc     bx
+        inc     si
+        cmp     bx, 2
+        ja      .bad
+        jmp     .fdig
+.fdone:
+        or      bx, bx
+        jz      .bad
+        call    at_end                  ; nothing may follow the number
+        jc      .bad
+        or      cx, cx
+        jz      .bad
+        cmp     cx, 12
+        ja      .bad
+        mov     bx, cx
+        dec     bx
+        mov     al, [fkey_tab + bx]
+        jmp     .ok
+
+.hex:   xor     cx, cx
+        xor     bx, bx
+.hdig:  mov     al, [si]
+        call    hexval
+        jc      .hdone
+        mov     ah, cl
+        mov     cl, 4
+        shl     ah, cl
+        mov     cl, ah
+        or      cl, al
+        inc     bx
+        inc     si
+        cmp     bx, 2
+        ja      .bad
+        jmp     .hdig
+.hdone:
+        or      bx, bx
+        jz      .bad
+        call    at_end                  ; reject trailing rubbish
+        jc      .bad
+        mov     al, cl
+        or      al, al
+        jz      .bad
+.ok:    clc
+        pop     si
+        pop     dx
+        pop     cx
+        pop     bx
+        ret
+.bad:   stc
+        pop     si
+        pop     dx
+        pop     cx
+        pop     bx
+        ret
+
+; at_end - CF=0 when SI is at the end of a config value or argument.
+at_end:
+        push    ax
+        mov     al, [si]
+        cmp     al, 0
+        je      .yes
+        cmp     al, 13
+        je      .yes
+        cmp     al, 10
+        je      .yes
+        cmp     al, ' '
+        je      .yes
+        cmp     al, 9
+        je      .yes
+        cmp     al, ';'
+        je      .yes
+        cmp     al, '#'
+        je      .yes
+        pop     ax
+        stc
+        ret
+.yes:   pop     ax
+        clc
+        ret
+
+; hexval - AL = character, returns AL = 0..15. CF=1 if not a hex digit.
+hexval:
+        cmp     al, '0'
+        jb      .no
+        cmp     al, '9'
+        ja      .alpha
+        sub     al, '0'
+        clc
+        ret
+.alpha: or      al, 20h
+        cmp     al, 'a'
+        jb      .no
+        cmp     al, 'f'
+        ja      .no
+        sub     al, 'a' - 10
+        clc
+        ret
+.no:    stc
+        ret
+
+; read_cfg_key - look for ABORT_KEY= in DGB.CFG in the current directory.
+; Runs before the TSR goes resident, so none of this stays in memory.
+read_cfg_key:
+        push    ax
+        push    bx
+        push    cx
+        push    dx
+        push    si
+        push    di
+
+        mov     ax, 3D00h
+        mov     dx, cfg_name
+        int     21h
+        jc      .out
+        mov     bx, ax
+
+        push    bx
+        mov     ah, 3Fh
+        mov     cx, CFGBUF_MAX
+        mov     dx, cfgbuf
+        int     21h
+        pop     bx
+        jc      .close
+        mov     si, cfgbuf
+        add     si, ax
+        mov     byte [si], 0
+.close:
+        mov     ah, 3Eh
+        int     21h
+
+        ; line by line, so a commented-out key cannot win
+        mov     si, cfgbuf
+.line:  cmp     byte [si], 0
+        je      .out
+.lsp:   mov     al, [si]
+        cmp     al, ' '
+        je      .lsp_adv
+        cmp     al, 9
+        jne     .lchk
+.lsp_adv:
+        inc     si
+        jmp     .lsp
+.lchk:  cmp     al, 0
+        je      .out
+        cmp     al, ';'
+        je      .next_line
+        cmp     al, '#'
+        je      .next_line
+        cmp     al, 13
+        je      .next_line
+        cmp     al, 10
+        je      .next_line
+
+        mov     di, cfg_keyname
+        push    si
+        call    match_lit_ci
+        jc      .found
+        pop     si
+.next_line:
+        mov     al, [si]
+        cmp     al, 0
+        je      .out
+        inc     si
+        cmp     al, 10
+        je      .line
+        jmp     .next_line
+
+.found:
+        add     sp, 2
+.vsp:   mov     al, [si]
+        cmp     al, ' '
+        je      .vsp_adv
+        cmp     al, 9
+        jne     .parse
+.vsp_adv:
+        inc     si
+        jmp     .vsp
+.parse:
+        call    parse_key
+        jc      .out
+        mov     [abort_key], al
+.out:
+        pop     di
+        pop     si
+        pop     dx
+        pop     cx
+        pop     bx
+        pop     ax
+        ret
+
+; match_lit_ci - DI = literal, SI = text. CF=1 and SI advanced on a match.
+match_lit_ci:
+        push    ax
+        push    bx
+.m1:    mov     al, [di]
+        cmp     al, 0
+        je      .ok
+        mov     bl, [si]
+        or      al, 20h
+        or      bl, 20h
+        cmp     bl, al
+        jne     .bad
+        inc     si
+        inc     di
+        jmp     .m1
+.ok:    stc
+        pop     bx
+        pop     ax
+        ret
+.bad:   clc
+        pop     bx
+        pop     ax
+        ret
+
+
 msg_ok          db      'ABORT resident: F12 or Ctrl+Alt+Backspace force-exits game.',13,10,'$'
 msg_already     db      'ABORT already installed.',13,10,'$'
+
+; --- transient: used while parsing, gone once resident --------------------
+CFGBUF_MAX      equ     512
+key_from_arg    db      0
+cfg_name        db      'DGB.CFG',0
+cfg_keyname     db      'ABORT_KEY=',0
+fkey_tab        db      3Bh,3Ch,3Dh,3Eh,3Fh,40h     ; F1..F6
+                db      41h,42h,43h,44h,57h,58h     ; F7..F12
+cfgbuf          times CFGBUF_MAX+2 db 0
 msg_wd          db      'Watchdog on: reclaiming INT 09h from games.',13,10,'$'

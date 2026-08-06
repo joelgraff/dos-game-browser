@@ -153,6 +153,18 @@ This will not work in every game — some read the keyboard hardware directly an
 never generate the interrupt the TSR watches. See
 [DIAGNOSTICS.md](DIAGNOSTICS.md).
 
+### If a game needs F12
+
+Change the key. Add a line to `DGB.CFG` in the launcher directory:
+
+```ini
+ABORT_KEY=F11
+```
+
+Any of `F1` to `F12`, or a raw scancode in hex for anything else. Re-running
+`SCAN` keeps the setting. The browser's header shows whichever key is set, so
+you can confirm it took.
+
 ## Limits
 
 `SCAN` and the browser handle up to **256 games**. `SCAN` on DOS records the

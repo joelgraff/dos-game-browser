@@ -38,6 +38,9 @@ Reference: **[file formats and limits](docs/FORMAT.md)** ·
 | Esc | Quit — `START.BAT` restarts it, which is the kiosk behaviour |
 | **F12** | Force-exit a running game ([not every game](docs/DIAGNOSTICS.md#the-force-exit-does-nothing)) |
 
+`F12` is the default; set `ABORT_KEY=F11` in `DGB.CFG` if a game needs it for
+play. Anything from `F1` to `F12`, or a raw scancode.
+
 There is also a maintenance exit that leaves the loop and drops to DOS, kept out
 of the UI so a machine in a public space cannot be trivially exited:
 **Shift+Esc**.
