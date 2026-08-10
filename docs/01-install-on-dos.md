@@ -156,12 +156,16 @@ never generate the interrupt the TSR watches. See
 
 ### If a game needs F12
 
-`DGB.CFG` in the launcher directory holds the settings. It arrives with
-everything commented out, which means the defaults apply. Uncomment the line
-and change it:
+`DGB.CFG` in the launcher directory holds the settings — that is
+`C:\DGB\DGB.CFG`, next to `BROWSER.COM`, not one level up.
+
+It arrives with everything commented out, so the defaults apply. Changing the
+value is not enough: **delete the leading `;` too**, or the line stays a
+comment and nothing happens.
 
 ```ini
-ABORT_KEY=F11
+;ABORT_KEY=F12      <- still a comment, does nothing
+ABORT_KEY=F11       <- active
 ```
 
 Any of `F1` to `F12`, or a raw scancode in hex for anything else. `EDIT` works

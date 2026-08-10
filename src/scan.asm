@@ -1533,8 +1533,9 @@ cfg_key         db 'GAMES_ROOT=',0
 cfg_akey        db 'ABORT_KEY=',0
 cfg_akey_hint   db ';',13,10
                 db '; ABORT_KEY is the single key that force-exits a stuck game.',13,10
-                db '; F1-F12, or a raw make-code in hex. Defaults to F12. Change it if',13,10
-                db '; a game needs that key for play.',13,10
+                db '; F1-F12, or a raw make-code in hex. Defaults to F12.',13,10
+                db '; To change it, delete the ; below as well as the value:',13,10
+                db '; a commented line does nothing.',13,10
                 db ';ABORT_KEY=F12',13,10,0
 
 lst_name        db 'GAMES.LST',0

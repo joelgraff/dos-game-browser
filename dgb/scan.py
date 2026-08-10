@@ -554,8 +554,9 @@ def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool,
         lines += [
             ";",
             "; ABORT_KEY is the single key that force-exits a stuck game.",
-            "; F1-F12, or a raw make-code in hex. Defaults to F12. Change it if",
-            "; a game needs that key for play.",
+            "; F1-F12, or a raw make-code in hex. Defaults to F12.",
+            "; To change it, delete the ';' below as well as the value:",
+            "; a commented line does nothing.",
             ";ABORT_KEY=F12",
         ]
     lines += preserved

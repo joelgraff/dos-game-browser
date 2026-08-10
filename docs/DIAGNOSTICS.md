@@ -98,8 +98,13 @@ reports both:
 ABORT=1 HINT=F11 or CTRL+ALT+BKSP exits game
 ```
 
-`HINT` is exactly what the browser's header shows. If it names a different key
-than the one you are pressing, `ABORT_KEY` in `DGB.CFG` is set to that one.
+`HINT` is exactly what the browser's header shows. If it still says `F12` after
+you set `ABORT_KEY`, check two things:
+
+- the line is **not** commented out — `;ABORT_KEY=F11` does nothing, the `;`
+  has to go
+- the file is the one next to `BROWSER.COM`, in the launcher directory, not one
+  level up in the image root
 `ABORT=0` means the TSR is not resident at all: `START.BAT` loads it, but only
 if `UTILS\ABORT.COM` is present.
 
