@@ -1,6 +1,7 @@
 """Installing the launcher into a mounted image, and staging it onto media."""
 from __future__ import annotations
 
+import sys
 import unittest
 from pathlib import Path
 
@@ -123,6 +124,43 @@ class StageTest(TempDirTest):
         run_dgb("stage", "--out", str(out))
         total = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
         self.assertLess(total, 360 * 1024, f"staged set is {total} bytes")
+
+
+class RunTest(TempDirTest):
+    """
+    'run' launches an image; it must not launch an unprepared one silently.
+
+    Any case that gets as far as launching passes --dosbox, because a real
+    DOSBox window waits for a human and would hang the suite indefinitely.
+    """
+
+    NOOP = "true" if sys.platform != "win32" else "rem"
+
+    def test_unprepared_image_is_refused_with_advice(self):
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        r = run_dgb("run", "--image-root", str(self.tmp), "--launcher-dir", "DGB")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no launcher found", r.stderr)
+        self.assertIn("dgb.py install", r.stderr)
+        self.assertIn("--install", r.stderr)
+
+    def test_install_flag_prepares_the_image(self):
+        """One command from a bare image to a runnable one."""
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        r = run_dgb("run", "--install", "--image-root", str(self.tmp),
+                    "--launcher-dir", "DGB", "--dosbox", self.NOOP)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        dgb = self.tmp / "DGB"
+        for name in ("BROWSER.COM", "START.BAT", "GAMES.LST", "DGB.CFG"):
+            self.assertTrue((dgb / name).is_file(), f"{name} not installed")
+
+    def test_missing_index_is_warned_about(self):
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        run_dgb("install", "--image-root", str(self.tmp))
+        (self.tmp / "DGB" / "GAMES.LST").unlink()
+        r = run_dgb("run", "--image-root", str(self.tmp), "--launcher-dir", "DGB",
+                    "--dosbox", self.NOOP)
+        self.assertIn("no GAMES.LST", r.stderr)
 
 
 class DoctorTest(TempDirTest):

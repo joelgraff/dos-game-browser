@@ -36,15 +36,33 @@ sudo apt install dosbox          # Debian/Ubuntu
 brew install dosbox              # macOS
 ```
 
+To use a particular build instead of the detected one, pass `--dosbox`:
+
+```bash
+python dgb.py run --dosbox ~/builds/dosbox-x/dosbox-x --image-root ~/dos-image
+```
+
 ## 2. Point it at an image
 
 Any directory works — a mounted card, a loopback-mounted image, or just a
-directory laid out the way the target will be. Prepare it first with
-[Prepare an image](02-prepare-image.md).
+directory laid out the way the target will be.
+
+If the image is already prepared (see [Prepare an image](02-prepare-image.md)):
 
 ```bash
 python dgb.py run --image-root ~/dos-image --launcher-dir DGB
 ```
+
+If it is not, add `--install` and both happen in one step — the launcher is
+copied in, the games are scanned, and DOSBox starts:
+
+```bash
+python dgb.py run --install --image-root ~/dos-image
+```
+
+`run` on its own never installs anything. Pointed at an unprepared image it
+stops and tells you, rather than starting DOSBox into a prompt where nothing
+works.
 
 That mounts the image root as `C:`, changes into the launcher directory, and
 runs `START.BAT` — exactly what happens on the real machine.
