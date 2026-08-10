@@ -810,7 +810,7 @@ msg_ok          db      'ABORT resident: F12 or Ctrl+Alt+Backspace force-exits g
 msg_already     db      'ABORT already installed.',13,10,'$'
 
 ; --- transient: used while parsing, gone once resident --------------------
-CFGBUF_MAX      equ     512
+CFGBUF_MAX      equ     2048
 key_from_arg    db      0
 cfg_name        db      'DGB.CFG',0
 cfg_keyname     db      'ABORT_KEY=',0

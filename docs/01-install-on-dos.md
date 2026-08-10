@@ -40,6 +40,7 @@ What you just copied, about 17 KB in all:
 | `START.BAT` | Loads the abort TSR, then loops the browser |
 | `UTILS\ABORT.COM` | TSR: **F12** force-exits a stuck game |
 | `UTILS\VDETECT.COM` | Optional video detection |
+| `DGB.CFG` | Settings, all commented out — see below |
 | `INSTALL.TXT` | These instructions, readable with `TYPE` |
 
 ## 3. Put your games somewhere
@@ -155,14 +156,23 @@ never generate the interrupt the TSR watches. See
 
 ### If a game needs F12
 
-Change the key. Add a line to `DGB.CFG` in the launcher directory:
+`DGB.CFG` in the launcher directory holds the settings. It arrives with
+everything commented out, which means the defaults apply. Uncomment the line
+and change it:
 
 ```ini
 ABORT_KEY=F11
 ```
 
-Any of `F1` to `F12`, or a raw scancode in hex for anything else. Re-running
-`SCAN` keeps the setting. The browser's header shows whichever key is set, so
+Any of `F1` to `F12`, or a raw scancode in hex for anything else. `EDIT` works
+fine:
+
+```
+EDIT C:\DGB\DGB.CFG
+```
+
+Re-running `SCAN` keeps the setting — it rewrites `GAMES_ROOT` and leaves
+everything else alone. The browser's header shows whichever key is active, so
 you can confirm it took.
 
 ## Limits

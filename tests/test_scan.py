@@ -221,6 +221,31 @@ class ScanTest(TempDirTest):
         self.assertIn("SOMETHING=42", cfg)             # not ours, kept
         self.assertNotIn("OLD", cfg)                   # stale value gone
 
+    def test_generated_config_documents_the_abort_key(self):
+        """
+        A shipped template's comments do not survive the rewrite, so the
+        generated file has to carry the hint itself or the option is invisible.
+        """
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        self.scan("--games-root", str(g), "--launcher-dir", str(self.tmp / "DGB"),
+                  "--games-root-dos", "\\GAMES")
+        cfg = self.cfg_text(self.tmp / "DGB")
+        self.assertIn(";ABORT_KEY=F12", cfg)        # commented, so inert
+        self.assertNotIn("\nABORT_KEY=", cfg)      # and not actually set
+
+    def test_the_hint_is_dropped_once_the_key_is_really_set(self):
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir()
+        (dgb / "DGB.CFG").write_bytes(b"ABORT_KEY=F11\r\n")
+        self.scan("--games-root", str(g), "--launcher-dir", str(dgb),
+                  "--games-root-dos", "\\GAMES")
+        cfg = self.cfg_text(dgb)
+        self.assertIn("ABORT_KEY=F11", cfg)
+        self.assertNotIn(";ABORT_KEY=F12", cfg)
+
     def test_abort_key_can_be_set_from_the_host(self):
         g = self.tmp / "GAMES"
         make_game(g / "JILL", "JILL.EXE")

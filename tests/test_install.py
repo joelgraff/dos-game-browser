@@ -84,6 +84,32 @@ class StageTest(TempDirTest):
         run_dgb("stage", "--out", str(out))
         self.assertTrue((out / "SCAN.COM").is_file())
 
+    def test_ships_a_commented_config_template(self):
+        """
+        Without this there is no DGB.CFG until the first scan, so nothing tells
+        you ABORT_KEY exists.
+        """
+        out = self.tmp / "floppy"
+        run_dgb("stage", "--out", str(out))
+        cfg = out / "DGB.CFG"
+        self.assertTrue(cfg.is_file(), "no DGB.CFG staged")
+        text = cfg.read_bytes().decode("ascii")
+        self.assertIn("ABORT_KEY", text)
+        self.assertIn("GAMES_ROOT", text)
+        # every setting commented out, so it changes nothing until edited
+        for line in text.replace("\r", "").splitlines():
+            if line.strip() and not line.startswith(";"):
+                self.fail(f"template has an active setting: {line!r}")
+
+    def test_staging_never_overwrites_a_real_config(self):
+        out = self.tmp / "floppy"
+        out.mkdir()
+        (out / "DGB.CFG").write_bytes(b"GAMES_ROOT=\\MINE\r\nABORT_KEY=F11\r\n")
+        run_dgb("stage", "--out", str(out))
+        text = (out / "DGB.CFG").read_bytes().decode("ascii")
+        self.assertIn("GAMES_ROOT=\\MINE", text)
+        self.assertIn("ABORT_KEY=F11", text)
+
     def test_instructions_are_plain_ascii_with_crlf(self):
         """INSTALL.TXT is read with DOS TYPE, so it must be ASCII and CRLF."""
         out = self.tmp / "floppy"

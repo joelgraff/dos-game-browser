@@ -129,6 +129,33 @@ class ScanComParityTest(TempDirTest):
         self.assertIn("SOMETHING=42", cfg)
         self.assertNotIn("OLD", cfg)
 
+    def test_generated_config_documents_the_abort_key(self):
+        """SCAN.COM must surface the option the same way the Python scanner does."""
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.scan_com, dgb / "SCAN.COM")
+        run_dosbox(self.tmp, ["cd \\DGB", "SCAN.COM C:\\GAMES > OUT.TXT"])
+        cfg = (dgb / "DGB.CFG").read_bytes().decode("ascii", "replace")
+        self.assertIn(";ABORT_KEY=F12", cfg)
+        self.assertIn("GAMES_ROOT=\\GAMES", cfg)
+
+    def test_settings_survive_a_realistically_sized_config(self):
+        """A 512-byte read buffer once dropped anything past the first few lines."""
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir(parents=True, exist_ok=True)
+        preamble = b"".join(b"; padding line %d to push the setting down\r\n" % i
+                            for i in range(40))
+        (dgb / "DGB.CFG").write_bytes(preamble + b"ABORT_KEY=F11\r\n")
+        shutil.copy2(self.scan_com, dgb / "SCAN.COM")
+        run_dosbox(self.tmp, ["cd \\DGB", "SCAN.COM C:\\GAMES > OUT.TXT"])
+        cfg = (dgb / "DGB.CFG").read_bytes().decode("ascii", "replace")
+        self.assertIn("ABORT_KEY=F11", cfg)
+        self.assertIn("GAMES_ROOT=\\GAMES", cfg)
+
     def test_directory_names_are_title_cased_identically(self):
         """Python's str.title() treats digits as word boundaries: 2FAST4YO -> 2Fast4Yo."""
         g = self.tmp / "GAMES"

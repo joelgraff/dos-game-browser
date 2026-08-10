@@ -102,6 +102,14 @@ def run(args: argparse.Namespace) -> int:
         if args.verbose:
             print(f"  {rel}")
 
+    # A commented template, so the settings are discoverable before any scan
+    # has run. Never overwrite a real one.
+    cfg_src = BIN / "DGB.CFG"
+    cfg_dst = out / "DGB.CFG"
+    if cfg_src.is_file() and not cfg_dst.exists():
+        shutil.copy2(cfg_src, cfg_dst)
+        total += cfg_dst.stat().st_size
+
     if not args.no_instructions:
         (out / "INSTALL.TXT").write_text(
             INSTALL_TXT.replace("\n", "\r\n"), encoding="ascii", errors="replace")

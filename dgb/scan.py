@@ -548,6 +548,16 @@ def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool,
             "; ABORT_KEY is the single-key force exit: F1-F12, or a hex scancode.",
             f"ABORT_KEY={abort_key}",
         ]
+    elif not any(l.split("=", 1)[0].strip().lower() == "abort_key" for l in preserved):
+        # Nobody has set it, so leave the option visible rather than silent:
+        # the comments in a shipped template do not survive this rewrite.
+        lines += [
+            ";",
+            "; ABORT_KEY is the single key that force-exits a stuck game.",
+            "; F1-F12, or a raw make-code in hex. Defaults to F12. Change it if",
+            "; a game needs that key for play.",
+            ";ABORT_KEY=F12",
+        ]
     lines += preserved
 
     if not dry_run:

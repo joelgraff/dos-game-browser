@@ -420,6 +420,23 @@ msg_spent db 'ARMED=0',13,10,'$'
                 out = self.dump(d, ["UTILS\\ABORT.COM"])
                 self.assertIn(f"HINT={expected} or CTRL+ALT+BKSP exits game", out)
 
+    def test_abort_key_is_found_in_a_realistic_config(self):
+        """
+        Every other case here uses a two-line config. The shipped template is
+        several hundred bytes with the setting near the end, and a 512-byte
+        read buffer silently missed it - the end-to-end run caught what these
+        tests did not.
+        """
+        preamble = "".join(f"; padding line {i} to push the setting down\r\n"
+                           for i in range(40))
+        d = self.fixture("bigcfg", "H|Action", GAME_LINE,
+                         cfg=preamble + "ABORT_KEY=F11\r\n")
+        self.assertGreater(len((d / "DGB.CFG").read_bytes()), 1200)
+        (d / "UTILS").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.abort, d / "UTILS" / "ABORT.COM")
+        out = self.dump(d, ["UTILS\\ABORT.COM"])
+        self.assertIn("HINT=F11 or CTRL+ALT+BKSP exits game", out)
+
     def test_abort_key_command_line_overrides_the_config(self):
         d = self.fixture("keyarg", "H|Action", GAME_LINE, cfg="ABORT_KEY=F11\r\n")
         (d / "UTILS").mkdir(parents=True, exist_ok=True)
