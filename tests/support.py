@@ -35,12 +35,35 @@ def require_nasm() -> Path:
     return nasm
 
 
+_headless: dict[str, bool] = {}
+
+
 def require_dosbox() -> Path:
     db = find_dosbox()
     if db is None:
         raise unittest.SkipTest("dosbox not installed")
     if str(db).startswith("flatpak:"):
         raise unittest.SkipTest("flatpak DOSBox cannot mount test fixtures")
+
+    # Some builds - dosbox-staging among them - abort under SDL's dummy video
+    # driver because they insist on a GL context. find_dosbox() prefers staging,
+    # so without this check a developer who has it installed gets a dozen
+    # baffling failures rather than a clear skip.
+    key = str(db)
+    if key not in _headless:
+        with tempfile.TemporaryDirectory() as probe:
+            conf = Path(probe) / "P.CONF"
+            conf.write_text("[autoexec]\nexit\n", encoding="ascii")
+            try:
+                r = subprocess.run([key, "-conf", str(conf), "-noconsole"],
+                                   cwd=probe, capture_output=True, timeout=30)
+                _headless[key] = r.returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                _headless[key] = False
+    if not _headless[key]:
+        raise unittest.SkipTest(
+            f"{db} cannot run headless (no GL context under SDL's dummy "
+            f"driver); install plain 'dosbox' to run the DOS-side tests")
     return db
 
 
@@ -48,8 +71,11 @@ def assemble(source: str, out: Path) -> Path:
     """Assemble src/<source> to out. Returns out."""
     nasm = require_nasm()
     out.parent.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run([str(nasm), "-f", "bin", "-o", str(out),
-                        str(ROOT / "src" / source)],
+    # -I mirrors dgb/build.py so %include "keynames.inc" resolves the same way
+    # here as it does in a real build.
+    r = subprocess.run([str(nasm), "-f", "bin",
+                        "-I", f"{ROOT / 'src'}{os.sep}",
+                        "-o", str(out), str(ROOT / "src" / source)],
                        capture_output=True, text=True)
     if r.returncode != 0:
         raise AssertionError(f"assembling {source} failed:\n{r.stderr}")

@@ -33,6 +33,7 @@ R1 DIR=BOUNCYBA EXE=BOUNCYB.COM YEAR=1983 PUB=Public Domain NOTE=Demo
 | `E<n>` | One per entry: type (0 game, 1 header, 2 spacer), file offset, title |
 | `R<n>` | The full record re-read from disk using that offset |
 | `KBD` | Keyboard state — see [below](#the-force-exit-does-nothing) |
+| `KBC` | 8042 controller state around the last game — see [below](#the-kbc-line) |
 
 The `R` lines matter more than they look: they are re-read from `GAMES.LST` by
 seeking to the offset stored in the entry, so if they are right, the index is
@@ -74,16 +75,17 @@ Re-run the scan. If you built the index with `SCAN.COM` on DOS, check that
 ## A game starts, then reports "Out of memory"
 
 `BROWSER.COM` stays resident as the parent process while a game runs, so it
-costs the game some conventional memory. It keeps that to about 8.7 KB by
-handing its entry table back to DOS before starting a child, and taking it back
-afterwards.
+costs the game some conventional memory. It keeps that to about 8.9 KB by
+handing its 11 KB entry table back to DOS before starting a child, and taking it
+back afterwards.
 
 If a game still runs out:
 
 - load fewer TSRs and drivers before `START.BAT`
 - check `MEM` on the target; a real machine with drivers can have far less free
   than DOSBox's ~620 KB
-- `ABORT.COM` is about 1 KB and can be left out — you lose force-exit
+- `ABORT.COM` costs about 1.1 KB resident and can be left out — you lose
+  force-exit
 
 ## The force-exit does nothing
 
@@ -95,16 +97,20 @@ First check it is loaded at all, and which key it is watching — the self-test
 reports both:
 
 ```
-ABORT=1 HINT=F11 or CTRL+ALT+BKSP exits game
+ABORT=1 HINT=SCRLOCK or CTRL+ALT+BKSP exits game
 ```
 
-`HINT` is exactly what the browser's header shows. If it still says `F12` after
-you set `ABORT_KEY`, check two things:
+`HINT` is exactly what the browser's header shows, and it names the key that is
+really in force. If it still says `SCRLOCK` after you set `ABORT_KEY`, check
+three things:
 
 - the line is **not** commented out — `;ABORT_KEY=F11` does nothing, the `;`
   has to go
 - the file is the one next to `BROWSER.COM`, in the launcher directory, not one
   level up in the image root
+- the value is one the parser accepts — a name from the
+  [FORMAT.md table](FORMAT.md#key-names-and-their-make-codes), `F1`-`F12`, or a
+  hex make-code. Anything else falls back to the default
 `ABORT=0` means the TSR is not resident at all: `START.BAT` loads it, but only
 if `UTILS\ABORT.COM` is present.
 
@@ -121,19 +127,65 @@ so the `KBD` line describes that session and nothing else:
 | `last=FA` | `FAh` is a keyboard controller acknowledgement, not a keystroke: the game is talking to the keyboard hardware itself |
 
 Measured on a real catalog: Jill of the Jungle, Sopwith and Commander Keen all
-force-exit correctly. Digger Remastered does not, and cannot — it polls the
-keyboard port directly, consuming each scancode before an interrupt is raised.
-Its reading is `scancodes=2 last=FA`, those two being the controller's replies
-to Digger's own setup commands.
+force-exit correctly. Digger Remastered does not, and why is **still open**.
 
-`grabs`, `irq1off` and `wdticks` are only sampled when the TSR is loaded with
-`/W`. **`wdticks=0` means the sampler never ran, so `grabs` and `irq1off` mean
-nothing** — they will read zero whether or not anything happened.
+Its reading is `scancodes=2 last=FA grabs=0 irq1off=0`. That was once written up
+as "it polls port 60h and consumes each scancode first", but the same reading
+argues against that being the whole story: `grabs=0` means the vector stayed
+ours and `irq1off=0` means IRQ1 was never masked, so the handler was installed
+and reachable and still saw almost nothing. Draining port 60h does not by itself
+prevent the interrupt — reading the port does not clear the request latched in
+the 8259, so the handler should still have been entered on every key.
+
+`last=FA` is the keyboard's ACK to a command, so Digger does talk to the
+hardware directly. The leading theory is that it tells the 8042 to stop raising
+IRQ1 and then polls, which every counter on the `KBD` line would report as
+innocent. The `KBC` line below exists to test that.
+
+`grabs`, `irq1off` and `wdticks` are only sampled when the TSR hooks the timer,
+which it does for `/W` and `/P`. **`wdticks=0` means the sampler never ran, so
+`grabs` and `irq1off` mean nothing** — they will read zero whether or not
+anything happened.
+
+### The KBC line
+
+```
+KBC base=45 game=44 last=44
+```
+
+The 8042 command byte, sampled at three points: `base` when the game was
+launched, `game` about two seconds in, `last` most recently. **Bit 0 is the
+keyboard interrupt enable.** A game that clears it stops IRQ1 being raised at
+all, and then no `INT 09h` handler can see the keyboard however firmly it holds
+the vector — a failure invisible everywhere else on the `KBD` line, because the
+PIC mask stays clear and the vector stays ours.
+
+| Reading | Meaning |
+|---------|---------|
+| `base=45 game=44` | odd → even: **the game turned the keyboard interrupt off.** This is the case worth finding |
+| `base` and `game` equal | the game left the controller alone; look elsewhere |
+| `base=--` | the controller did not answer the query at all. Expected under DOSBox, which does not emulate it — this line is only meaningful on real hardware |
+| `game=--`, `last=--`, `base` present | no game has run since the TSR loaded, or the controller was busy at every sample |
+
+A dash is never a value: a sample that was not taken prints `--` so it cannot be
+confused with a byte of `00`.
+
+Sampling needs the timer hook, so run the game with the probe:
+
+```bat
+UTILS\ABORT.COM /P
+```
+
+`/P` samples and reports without touching anything — unlike `/W` it never
+reclaims the vector, so it cannot change how a game behaves. Under `/P`,
+`grabs` counts *ticks on which the vector was somebody else's* rather than times
+it was taken back, which makes it a cleaner reading of whether a game hooks
+`INT 09h` at all.
 
 ### `ABORT.COM /W`
 
-There is an opt-in mode that watches the keyboard interrupt vector and takes it
-back if a game grabs it:
+The other opt-in timer mode. It watches the keyboard interrupt vector and takes
+it back if a game grabs it:
 
 ```bat
 IF EXIST UTILS\ABORT.COM UTILS\ABORT.COM /W

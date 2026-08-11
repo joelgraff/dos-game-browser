@@ -231,7 +231,7 @@ class ScanTest(TempDirTest):
         self.scan("--games-root", str(g), "--launcher-dir", str(self.tmp / "DGB"),
                   "--games-root-dos", "\\GAMES")
         cfg = self.cfg_text(self.tmp / "DGB")
-        self.assertIn(";ABORT_KEY=F12", cfg)        # commented, so inert
+        self.assertIn(";ABORT_KEY=SCRLOCK", cfg)    # commented, so inert
         self.assertNotIn("\nABORT_KEY=", cfg)      # and not actually set
 
     def test_the_hint_is_dropped_once_the_key_is_really_set(self):
@@ -244,7 +244,7 @@ class ScanTest(TempDirTest):
                   "--games-root-dos", "\\GAMES")
         cfg = self.cfg_text(dgb)
         self.assertIn("ABORT_KEY=F11", cfg)
-        self.assertNotIn(";ABORT_KEY=F12", cfg)
+        self.assertNotIn(";ABORT_KEY=SCRLOCK", cfg)
 
     def test_abort_key_can_be_set_from_the_host(self):
         g = self.tmp / "GAMES"

@@ -1533,10 +1533,13 @@ cfg_key         db 'GAMES_ROOT=',0
 cfg_akey        db 'ABORT_KEY=',0
 cfg_akey_hint   db ';',13,10
                 db '; ABORT_KEY is the single key that force-exits a stuck game.',13,10
-                db '; F1-F12, or a raw make-code in hex. Defaults to F12.',13,10
+                db '; Defaults to SCRLOCK. Give a key name, F1-F12, or a hex make-code.',13,10
+                db '; Names:',13,10
+                db ';   BKSP CAPSLOCK DEL DOWN END ENTER ESC GRAVE HOME INS LEFT NUMLOCK',13,10
+                db ';   PGDN PGUP PRTSC RIGHT SCRLOCK SPACE TAB UP',13,10
                 db '; To change it, delete the ; below as well as the value:',13,10
                 db '; a commented line does nothing.',13,10
-                db ';ABORT_KEY=F12',13,10,0
+                db ';ABORT_KEY=SCRLOCK',13,10,0
 
 lst_name        db 'GAMES.LST',0
 cfg_name        db 'DGB.CFG',0

@@ -85,6 +85,27 @@ class StageTest(TempDirTest):
         run_dgb("stage", "--out", str(out))
         self.assertTrue((out / "SCAN.COM").is_file())
 
+    def test_stages_a_dos_side_installer(self):
+        """
+        UC1's user is at a DOS prompt with no modern PC. INSTALL.BAT turns
+        five hand-typed commands into 'A:' then 'INSTALL C:', which is both
+        shorter and impossible to mistype a path into.
+        """
+        out = self.tmp / "floppy"
+        run_dgb("stage", "--out", str(out))
+        bat = out / "INSTALL.BAT"
+        self.assertTrue(bat.is_file(), "no INSTALL.BAT staged")
+        raw = bat.read_bytes()
+        raw.decode("ascii")                 # raises if anything is non-ASCII
+        self.assertIn(b"\r\n", raw)
+        text = raw.decode("ascii")
+        # It copies the launcher and its UTILS subdirectory, and says what next.
+        self.assertIn("MD %1\\DGB", text)
+        self.assertIn("UTILS", text)
+        self.assertIn("SCAN", text)
+        # DOS 3.x batch only: ECHO. and CALL are later additions.
+        self.assertNotIn("ECHO.", text)
+
     def test_ships_a_commented_config_template(self):
         """
         Without this there is no DGB.CFG until the first scan, so nothing tells

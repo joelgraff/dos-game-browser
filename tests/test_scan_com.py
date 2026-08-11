@@ -138,7 +138,7 @@ class ScanComParityTest(TempDirTest):
         shutil.copy2(self.scan_com, dgb / "SCAN.COM")
         run_dosbox(self.tmp, ["cd \\DGB", "SCAN.COM C:\\GAMES > OUT.TXT"])
         cfg = (dgb / "DGB.CFG").read_bytes().decode("ascii", "replace")
-        self.assertIn(";ABORT_KEY=F12", cfg)
+        self.assertIn(";ABORT_KEY=SCRLOCK", cfg)
         self.assertIn("GAMES_ROOT=\\GAMES", cfg)
 
     def test_settings_survive_a_realistically_sized_config(self):

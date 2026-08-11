@@ -93,6 +93,38 @@ class ConfigAndIndexTest(_BrowserBase):
                 self.assertIn(f"PFX={pfx}", out)
                 self.assertIn(f"PFXABS={pfxabs}", out)
 
+    def test_games_root_is_found_past_the_shipped_templates_length(self):
+        """
+        The launcher used to read only the first 240 bytes of DGB.CFG. The
+        shipped template puts GAMES_ROOT at byte 178, so a handful of added
+        comment lines pushed the real setting out of range and the launcher
+        fell back to \\GAMES without saying anything - the same silent-window
+        bug that once hid ABORT_KEY from the TSR.
+        """
+        padding = "".join(f"; comment line {i} added by hand\r\n" for i in range(20))
+        # Past the old 240-byte window, comfortably inside the new one.
+        self.assertGreater(len(padding), 300)
+        self.assertLess(len(padding), 900)
+        d = self.fixture("cfgdeep", "H|Action", GAME_LINE,
+                         cfg=padding + "GAMES_ROOT=\\DEEP\r\n")
+        out = self.dump(d)
+        self.assertIn("CFG=1", out)
+        self.assertIn("PFXABS=\\DEEP\\", out)
+        self.assertNotIn("TRUNCATED", out)
+
+    def test_an_oversized_config_says_so_instead_of_failing_quietly(self):
+        """
+        Past the buffer we cannot honour the setting, but we can refuse to be
+        silent about it: a wrong games root with no explanation is the worst
+        outcome here.
+        """
+        padding = "".join(f"; padding line {i}\r\n" for i in range(120))
+        self.assertGreater(len(padding), 1024)
+        d = self.fixture("cfghuge", "H|Action", GAME_LINE,
+                         cfg=padding + "GAMES_ROOT=\\TOOFAR\r\n")
+        out = self.dump(d)
+        self.assertIn("TRUNCATED", out)
+
     # -- index parsing ----------------------------------------------------
     def test_index_parsing_and_offsets(self):
         d = self.fixture(
@@ -394,23 +426,74 @@ msg_spent db 'ARMED=0',13,10,'$'
         # loading the TSR must not stop the batch before the browser runs
         self.assertIn("NENT=2", out)
 
+    def test_controller_probe_line_is_reported(self):
+        """
+        The KBC line carries the 8042 command byte around a game. Each field is
+        two hex digits or '--' for a sample that was never taken, so a missing
+        reading can never be misread as a byte of 00h.
+        """
+        d = self.fixture("kbcprobe")
+        (d / "UTILS").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.abort, d / "UTILS" / "ABORT.COM")
+        out = self.dump(d, ["UTILS\\ABORT.COM /P"])
+        self.assertRegex(out, re.compile(
+            r"^KBC base=(?:[0-9A-F]{2}|--) game=(?:[0-9A-F]{2}|--) "
+            r"last=(?:[0-9A-F]{2}|--)$", re.M))
+
+    def test_probe_mode_does_not_reclaim_the_vector(self):
+        """
+        /P is the diagnostic-only half of /W: it must hook the timer to sample,
+        and must never put our handler back in front of a game. Loading it has
+        to leave everything else working.
+        """
+        d = self.fixture("probeonly")
+        (d / "UTILS").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.abort, d / "UTILS" / "ABORT.COM")
+        out = self.dump(d, ["UTILS\\ABORT.COM /P"])
+        self.assertIn("ABORT=1", out)
+        self.assertIn("NENT=2", out)
+
+    def test_controller_probe_is_absent_without_the_tsr(self):
+        """No TSR, no KBC line - the browser must not invent one."""
+        out = self.dump(self.fixture("kbcnotsr"))
+        self.assertIn("ABORT=0", out)
+        self.assertNotIn("KBC ", out)
+
     def test_abort_key_is_configurable(self):
         """
-        A game may want F12 for play, so the trigger is settable in DGB.CFG.
-        Bad values fall back to the default rather than picking something
-        arbitrary - "banana" was once read as scancode BAh.
+        A game may want the abort key for play, so the trigger is settable in
+        DGB.CFG. Bad values fall back to the default rather than picking
+        something arbitrary - "banana" was once read as scancode BAh.
+
+        This runs both halves of keynames.inc against each other: ABORT.COM
+        parses the name and BROWSER.COM renders the hint from the code, so a
+        table the two disagreed about would show up here.
         """
         cases = [
-            ("default", None, "F12"),
+            ("default", None, "SCRLOCK"),
             ("F11", "ABORT_KEY=F11\r\n", "F11"),
             ("F1", "ABORT_KEY=F1\r\n", "F1"),
             ("lowercase", "abort_key=f11\r\n", "F11"),
             ("raw hex", "ABORT_KEY=5B\r\n", "KEY 5B"),
             ("commented out first", "; ABORT_KEY=F1\r\nABORT_KEY=F11\r\n", "F11"),
             ("trailing comment", "ABORT_KEY=F11 ; why\r\n", "F11"),
-            ("not a key", "ABORT_KEY=banana\r\n", "F12"),
-            ("out of range", "ABORT_KEY=F13\r\n", "F12"),
-            ("trailing rubbish", "ABORT_KEY=5BX\r\n", "F12"),
+            # named keys
+            ("name", "ABORT_KEY=ESC\r\n", "ESC"),
+            ("name lowercase", "abort_key=grave\r\n", "GRAVE"),
+            ("name mixed case", "ABORT_KEY=ScrLock\r\n", "SCRLOCK"),
+            ("alias renders canonical", "ABORT_KEY=SCROLLLOCK\r\n", "SCRLOCK"),
+            ("alias renders canonical 2", "ABORT_KEY=BACKSPACE\r\n", "BKSP"),
+            # a code with a name is displayed as that name however it was given
+            ("hex of a named key", "ABORT_KEY=46\r\n", "SCRLOCK"),
+            # names starting with a hex digit or F must not be read as numbers
+            ("name beginning with hex digit", "ABORT_KEY=DEL\r\n", "DEL"),
+            ("name beginning with E", "ABORT_KEY=END\r\n", "END"),
+            # rejections all fall back to the default
+            ("not a key", "ABORT_KEY=banana\r\n", "SCRLOCK"),
+            ("out of range", "ABORT_KEY=F13\r\n", "SCRLOCK"),
+            ("trailing rubbish", "ABORT_KEY=5BX\r\n", "SCRLOCK"),
+            ("name is only a prefix", "ABORT_KEY=UPPER\r\n", "SCRLOCK"),
+            ("name with rubbish after", "ABORT_KEY=ESCX\r\n", "SCRLOCK"),
         ]
         for i, (name, cfg, expected) in enumerate(cases):
             with self.subTest(name):

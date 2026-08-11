@@ -21,16 +21,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .paths import BIN, ROOT, dos_to_host_subpath, launcher_files
+from . import keys
+from .paths import (BIN, ROOT, display_path, dos_to_host_subpath,
+                    launcher_files)
 from . import scan as scan_mod
-
-
-def dos_to_host_subpath(dos_path: str) -> Path:
-    p = dos_path.strip().replace("/", "\\")
-    if ":" in p:
-        p = p.split(":", 1)[1]
-    p = p.lstrip("\\")
-    return Path(*[part for part in p.split("\\") if part])
 
 
 def install_launcher(
@@ -119,8 +113,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--no-install", action="store_true", help="Skip copying launcher files")
     ap.add_argument("--no-scan", action="store_true", help="Skip scan and only install launcher files")
     ap.add_argument("--abort-key",
-                    help="Force-exit key written to DGB.CFG: F1-F12, or a hex "
-                         "scancode. Left alone if not given.")
+                    help="Force-exit key written to DGB.CFG: %s "
+                         "(see README). Left alone if not given."
+                         % keys.describe())
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
     ap.add_argument(
@@ -188,9 +183,15 @@ def run(args: argparse.Namespace) -> int:
         print("setup failed: the scan reported an error", file=sys.stderr)
         return 2
 
+    # Testing under DOSBox before committing the card to real hardware is the
+    # whole point of use case 3, and it used to go unmentioned right at the
+    # moment it is most useful.
     print("\nNext steps:")
     print("  1. Review the GAME.TXT files the scan reported as needing it")
     print("  2. Re-run 'dgb.py scan' after editing them")
-    print("  3. Boot image and run START.BAT from launcher path")
+    print("  3. Try it under DOSBox before writing the card:")
+    print(f"       python dgb.py run --image-root {display_path(image_root)}"
+          f" --launcher-dir {dos_to_host_subpath(args.launcher_path)}")
+    print("  4. Then boot the image and run START.BAT from the launcher path")
     return 0
 

@@ -2,37 +2,54 @@
 ; ABORT.COM — Resident force-exit hotkey for kiosk / booth use
 ;
 ; Installs as a TSR. While a game is running under the browser:
-;   The abort key (F12 by default), or Ctrl + Alt + Backspace
+;   The abort key (Scroll Lock by default), or Ctrl + Alt + Backspace
 ;                                   →  terminate current process
 ;
-; The single key is configurable, because a game may want F12 for play. Put
-; ABORT_KEY in DGB.CFG next to BROWSER.COM:
+; The single key is configurable, because a game may want that key for play.
+; Put ABORT_KEY in DGB.CFG next to BROWSER.COM:
 ;
-;   ABORT_KEY=F11        F1 to F12 by name
+;   ABORT_KEY=SCRLOCK    a name from keynames.inc
+;   ABORT_KEY=F11        F1 to F12 by number
 ;   ABORT_KEY=5B         or any raw make-code, in hex
 ;
-; ABORT.COM /K:F11 overrides it for one run. The key table, the parser and the
+; ABORT.COM /K:F11 overrides it for one run. The name table, the parser and the
 ; config reader all sit below resident_end and are discarded when the TSR
-; installs, so the whole feature costs about 65 resident bytes.
+; installs, so names and parsing cost file size only - the resident image is
+; the same size with them as without.
 ;
-; F12 needs no modifier, so it still works when a game's own keyboard handler
-; has left the Ctrl/Alt state inconsistent.
+; The key needs no modifier, so it still works when a game's own keyboard
+; handler has left the Ctrl/Alt state inconsistent. Scroll Lock is the default
+; because no game in the test catalog reads it, and unlike F11/F12 it is
+; present on an 83-key XT keyboard.
 ;
 ; Safe for real 8086/286/386 MS-DOS and DOSBox. Calls DOS only when InDOS
 ; is clear (or via INT 28h idle). Chains prior INT 09h / INT 28h handlers.
 ;
-; ABORT.COM /W enables a timer watchdog that takes INT 09h back from games that
-; seize it. Off by default: it puts this handler in front of a game that expects
-; exclusive keyboard control, which is a real risk. Try it per-game.
+; Two optional timer-hooked modes, both off by default:
 ;
-; LIMITATION: a game that polls port 60h in a tight loop consumes each scancode
-; before the interrupt is serviced, leaving nothing for this handler to see.
-; Digger Remastered does exactly that: measured with the vector still ours and
-; IRQ1 still unmasked, only its start-up controller ACKs ever reached us. No
-; hotkey can work there. Commander Keen, Jill and Sopwith are all fine. Stealing the vector back from a timer tick was
-; tried and reverted -- sitting in front of a game that owns the keyboard
-; stopped Keen from starting at all. Run BROWSER.COM /T after playing: if it
-; reports KBD scancodes=0, the game owned the keyboard outright.
+;   /W  watchdog - sample, and take INT 09h back from a game that seizes it.
+;       Risky per game: it puts this handler in front of one that expects
+;       exclusive keyboard control. Stealing the vector back this way once
+;       stopped Commander Keen from starting at all.
+;   /P  probe - sample only, never touch the vector. Changes nothing about how
+;       a game runs, so it is the safe one to leave on while diagnosing.
+;
+; UNRESOLVED: Digger Remastered never sees the hotkey. Commander Keen, Jill and
+; Sopwith are all fine. The measured reading is
+;
+;   scancodes=2 last=FA grabs=0 irq1off=0
+;
+; which is not yet explained. grabs=0 says the vector stayed ours and irq1off=0
+; says IRQ1 was never masked at the PIC, so the handler was installed and
+; reachable and still saw almost nothing. Draining port 60h in a polling loop
+; does not account for that on its own: reading the port does not clear the
+; request latched in the 8259, so this handler should still have been entered.
+;
+; last=FA is the keyboard's ACK to a command, so Digger does talk to the
+; hardware directly. The leading theory is that it tells the 8042 to stop
+; raising IRQ1 and then polls - which every counter above would report as
+; innocent, because it is the controller and not the PIC that went quiet. The
+; KBC line exists to test exactly that; see docs/DIAGNOSTICS.md.
 ;
 ; Usage:
 ;   ABORT.COM          install (prints banner)
@@ -52,7 +69,11 @@ KF_CTRL         equ     04h
 KF_ALT          equ     08h
 ; Make code for Backspace is 0Eh; break is 8Eh
 SC_BACKSPACE    equ     0Eh
-SC_F12          equ     58h             ; 101-key F12; no E0 prefix, the default
+SC_F12          equ     58h             ; 101-key F12; no E0 prefix
+; Scroll Lock is the default trigger: no game in the test catalog reads it, and
+; unlike F11/F12 it exists on an 83-key XT keyboard, so the default works on the
+; oldest hardware this runs on.
+SC_SCRLOCK      equ     46h
 
 start:
         push    cs
@@ -76,9 +97,13 @@ start:
         or      al, 20h
         cmp     al, 'k'
         je      .keyarg
+        cmp     al, 'p'
+        je      .probearg
         cmp     al, 'w'
         jne     .next
-        mov     byte [watchdog], 1
+        mov     byte [reclaim], 1       ; /W also takes the vector back
+.probearg:
+        mov     byte [watchdog], 1      ; /P only watches and samples
         jmp     .next
 .keyarg:
         ; /K:F11 or /K=5B - overrides DGB.CFG for this run
@@ -168,12 +193,26 @@ start:
         mov     dx, int2f
         int     21h
 
+        ; Take one reading now, before any game has run. Without it a dash in
+        ; the KBC line is ambiguous - it could mean "no game started" or "this
+        ; machine will not answer the query" - and those need different
+        ; conclusions. AB03h overwrites this at each game start.
+        call    kbc_read
+        jc      .no_base
+        mov     [kbc_base], al
+        or      byte [kbc_ok], 1
+.no_base:
+
         mov     dx, msg_ok
         mov     ah, 09h
         int     21h
         cmp     byte [watchdog], 0
         je      .banner_done
+        mov     dx, msg_probe
+        cmp     byte [reclaim], 0
+        je      .banner_msg
         mov     dx, msg_wd
+.banner_msg:
         mov     ah, 09h
         int     21h
 .banner_done:
@@ -193,7 +232,19 @@ start:
 old09           dd      0               ; current chain target (may be a game's)
 orig09          dd      0               ; handler present when we installed
 old08           dd      0               ; only used when the watchdog is on
-watchdog        db      0               ; 1 = /W given
+watchdog        db      0               ; 1 = INT 08h hooked (/W or /P)
+reclaim         db      0               ; 1 = /W: also take INT 09h back
+
+; 8042 keyboard-controller command byte, sampled around a game. Bit 0 is the
+; keyboard interrupt enable: a game that clears it stops IRQ1 being raised at
+; all, and then no INT 09h handler can see the keyboard however firmly it holds
+; the vector. That is invisible in every other counter here -- the PIC mask
+; reads clear, the vector reads ours -- which is why it gets its own sample.
+kbc_base        db      0               ; read at game start, before EXEC
+kbc_game        db      0               ; first successful in-game sample
+kbc_last        db      0               ; most recent in-game sample
+kbc_ok          db      0               ; bit0 base, bit1 game, bit2 last
+kbc_next        db      0               ; ticks until the next sample
 wd_grabs        dw      0               ; times the watchdog reclaimed INT 09h
 counting        db      1               ; gate so a reading can cover one game
 indos_blk       dw      0               ; times an abort was recognised but DOS
@@ -213,7 +264,7 @@ busy            db      0               ; set while terminating; cleared by
                                         ; INT 2Fh AB01h/AB03h when the browser
                                         ; regains control. Without that the
                                         ; hotkey only ever fires once.
-abort_key       db      SC_F12          ; the configured single-key trigger
+abort_key       db      SC_SCRLOCK      ; the configured single-key trigger
 kf_own          db      0               ; Ctrl/Alt tracked from scancodes
 sc_count        dw      0               ; scancodes seen (diagnostic)
 sc_last         db      0               ; last scancode seen (diagnostic)
@@ -238,6 +289,8 @@ int2f:
         je      .ticks
         cmp     ax, 0AB07h              ; which key is the abort key
         je      .whichkey
+        cmp     ax, 0AB08h              ; 8042 command byte samples
+        je      .kbcrep
         jmp     far [cs:old2f]
 .present:
         mov     al, 0ABh
@@ -256,6 +309,17 @@ int2f:
         mov     word [cs:irq1_off], 0
         mov     word [cs:wd_ticks], 0
         mov     byte [cs:counting], 1
+
+        ; Baseline the controller before the game gets a chance to touch it.
+        ; Taken here, outside any interrupt, where nothing is competing for the
+        ; output buffer; the in-game samples come from the timer tick.
+        mov     byte [cs:kbc_ok], 0
+        mov     byte [cs:kbc_next], 36  ; ~2s, after the game has set itself up
+        call    kbc_read
+        jc      .zero_done
+        mov     [cs:kbc_base], al
+        or      byte [cs:kbc_ok], 1
+.zero_done:
         mov     al, 0ABh
         iret
 .stop:                                  ; AB04h: stop, so the reading is frozen
@@ -268,6 +332,15 @@ int2f:
         iret
 .whichkey:                              ; AB07h: BL = the configured scancode
         mov     bl, [cs:abort_key]
+        mov     al, 0ABh
+        iret
+.kbcrep:                                ; AB08h: the 8042 command byte samples
+        ; BL = at game start, BH = first in-game, CL = last in-game,
+        ; CH = which of those are valid (bit0/bit1/bit2).
+        mov     bl, [cs:kbc_base]
+        mov     bh, [cs:kbc_game]
+        mov     cl, [cs:kbc_last]
+        mov     ch, [cs:kbc_ok]
         mov     al, 0ABh
         iret
 .spend:                                 ; AB05h: leave the hotkey disarmed, the
@@ -415,8 +488,23 @@ int08:
         ; keyboard interrupt happens at all and no handler can see keys.
         in      al, 21h                 ; PIC 1 interrupt mask
         test    al, 02h                 ; bit 1 = IRQ1 (keyboard)
-        jz      .nomask
+        jz      .kbc
         inc     word [cs:irq1_off]
+
+        ; About once a second, sample the controller's command byte. The PIC
+        ; mask above only catches a game that masks IRQ1; a game that instead
+        ; tells the 8042 to stop raising it looks completely innocent here.
+.kbc:   dec     byte [cs:kbc_next]
+        jnz     .nomask
+        mov     byte [cs:kbc_next], 18
+        call    kbc_read
+        jc      .nomask                 ; controller busy; try again next tick
+        mov     [cs:kbc_last], al
+        or      byte [cs:kbc_ok], 4
+        test    byte [cs:kbc_ok], 2
+        jnz     .nomask
+        mov     [cs:kbc_game], al       ; first in-game reading, kept separately
+        or      byte [cs:kbc_ok], 2
 .nomask:
 
         mov     dx, cs
@@ -433,6 +521,12 @@ int08:
         je      .grab_go
         inc     word [cs:wd_grabs]
 .grab_go:
+        ; /P watches without touching anything: wd_grabs then counts ticks on
+        ; which the vector was somebody else's, rather than times we took it
+        ; back. Only /W actually reclaims.
+        cmp     byte [cs:reclaim], 0
+        je      .out
+
         mov     [cs:old09], ax
         mov     [cs:old09+2], bx
         cli
@@ -445,6 +539,45 @@ int08:
         pop     bx
         pop     ax
         iret
+
+;------------------------------------------------------------------------------
+; kbc_read - AL = the 8042 command byte. CF=1 if it could not be read.
+;
+; Diagnosing a game must not change how it plays, so this refuses to run unless
+; the controller is idle in both directions. If a scancode is already sitting in
+; the output buffer we skip the sample entirely rather than consume a keystroke
+; the game is polling for.
+;
+; An XT has no 8042 at all; port 64h floats high there, so the first test sees
+; both busy bits set and gives up immediately, which is the right answer.
+;------------------------------------------------------------------------------
+kbc_read:
+        push    cx
+
+        in      al, 64h
+        test    al, 03h                 ; bit0 output full, bit1 input full
+        jnz     .busy
+
+        mov     al, 20h                 ; "read command byte"
+        out     64h, al
+
+        ; Bounded wait: this runs inside a timer interrupt, so never spin on
+        ; hardware that is not going to answer.
+        mov     cx, 1000
+.wait:  in      al, 64h
+        test    al, 01h
+        jnz     .got
+        loop    .wait
+        jmp     .busy
+
+.got:   in      al, 60h
+        pop     cx
+        clc
+        ret
+
+.busy:  pop     cx
+        stc
+        ret
 
 ;------------------------------------------------------------------------------
 ; Point INT 09h back at us, chaining to the handler that existed at install.
@@ -562,13 +695,20 @@ resident_end:
 ; during installation and is then discarded, so it costs file size only.
 ;------------------------------------------------------------------------------
 ; parse_key - SI = text, returns AL = make-code. CF=1 if unrecognised.
-; Accepts F1..F12 by name, or a one or two digit hex make-code. The whole
-; token must be consumed, so "banana" is rejected rather than read as BAh.
+; Accepts a name from keynames.inc, F1..F12, or a one or two digit hex
+; make-code. The whole token must be consumed, so "banana" is rejected rather
+; than read as BAh.
+;
+; Names are tried first because several of them start with a hex digit or an F
+; - DEL, END, ESC - and would otherwise be read as numbers.
 parse_key:
         push    bx
         push    cx
         push    dx
         push    si
+
+        call    lookup_name
+        jnc     .ok
 
         mov     al, [si]
         or      al, 20h
@@ -641,6 +781,63 @@ parse_key:
         ret
 .bad:   stc
         pop     si
+        pop     dx
+        pop     cx
+        pop     bx
+        ret
+
+; lookup_name - SI = text. Returns AL = make-code and CF=0 if the whole token
+; is a name from keynames.inc, CF=1 otherwise. SI is preserved either way, so a
+; miss costs the caller nothing.
+;
+; Matching is case-insensitive and must consume the token: SCRLOCK matches,
+; SCRLOCKS does not. Folding stops naturally at the token terminator, because a
+; terminator folds to a value no letter can equal.
+lookup_name:
+        push    bx
+        push    cx
+        push    dx
+        push    si
+
+        mov     dx, si                  ; token start, to restart each entry
+        mov     bx, keyname_tab
+.entry:
+        cmp     byte [bx], 0
+        je      .nomatch                ; end of table
+        mov     si, dx
+.cmp:   mov     al, [bx]
+        or      al, al
+        jz      .endname
+        mov     ah, [si]
+        or      ah, 20h                 ; fold the input
+        mov     cl, al
+        or      cl, 20h                 ; fold the table entry
+        cmp     ah, cl
+        jne     .skip
+        inc     bx
+        inc     si
+        jmp     .cmp
+
+.endname:
+        ; The name ran out. Unless the token ends here too this is a prefix
+        ; match - UP against UPPER - and must not count.
+        call    at_end
+        jc      .next
+        mov     al, [bx+1]              ; the code byte follows the NUL
+        clc
+        jmp     .out
+
+.skip:  cmp     byte [bx], 0            ; walk to the end of this name
+        je      .next
+        inc     bx
+        jmp     .skip
+.next:  inc     bx                      ; past the NUL
+        inc     bx                      ; past the code
+        jmp     .entry
+
+.nomatch:
+        stc
+.out:   pop     si
         pop     dx
         pop     cx
         pop     bx
@@ -806,7 +1003,7 @@ match_lit_ci:
         ret
 
 
-msg_ok          db      'ABORT resident: F12 or Ctrl+Alt+Backspace force-exits game.',13,10,'$'
+msg_ok          db      'ABORT resident: force-exit hotkey armed.',13,10,'$'
 msg_already     db      'ABORT already installed.',13,10,'$'
 
 ; --- transient: used while parsing, gone once resident --------------------
@@ -816,5 +1013,9 @@ cfg_name        db      'DGB.CFG',0
 cfg_keyname     db      'ABORT_KEY=',0
 fkey_tab        db      3Bh,3Ch,3Dh,3Eh,3Fh,40h     ; F1..F6
                 db      41h,42h,43h,44h,57h,58h     ; F7..F12
+
+%include        "keynames.inc"
+
 cfgbuf          times CFGBUF_MAX+2 db 0
 msg_wd          db      'Watchdog on: reclaiming INT 09h from games.',13,10,'$'
+msg_probe       db      'Probe on: sampling the keyboard controller, changing nothing.',13,10,'$'

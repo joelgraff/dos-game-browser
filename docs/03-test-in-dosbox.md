@@ -21,8 +21,8 @@ python dgb.py doctor
 Python      3.12.3  (linux)
 NASM        /usr/bin/nasm
 DOSBox      /usr/bin/dosbox
-Prebuilt    present (BROWSER.COM 8704B, ABORT.COM 978B)
-SCAN.COM    present (5440B) - the index can be built on the DOS machine
+Prebuilt    present (BROWSER.COM 9088B, ABORT.COM 3978B)
+SCAN.COM    present (10160B) - the index can be built on the DOS machine
 
 Everything needed is present.
 ```

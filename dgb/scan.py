@@ -32,6 +32,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import keys
 from . import limits as dgb_limits
 from .paths import ROOT, display_path, host_to_dos_rel
 
@@ -545,7 +546,7 @@ def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool,
     ]
     if abort_key is not None:
         lines += [
-            "; ABORT_KEY is the single-key force exit: F1-F12, or a hex scancode.",
+            f"; ABORT_KEY is the single-key force exit: {keys.describe()}.",
             f"ABORT_KEY={abort_key}",
         ]
     elif not any(l.split("=", 1)[0].strip().lower() == "abort_key" for l in preserved):
@@ -554,10 +555,14 @@ def write_browser_cfg(launcher_dir: Path, games_root_dos: str, dry_run: bool,
         lines += [
             ";",
             "; ABORT_KEY is the single key that force-exits a stuck game.",
-            "; F1-F12, or a raw make-code in hex. Defaults to F12.",
+            f"; Defaults to {keys.DEFAULT_KEY}. Give {keys.describe()}.",
+            "; Names:",
+        ]
+        lines += [f";   {l}" for l in keys.name_lines(66)]
+        lines += [
             "; To change it, delete the ';' below as well as the value:",
             "; a commented line does nothing.",
-            ";ABORT_KEY=F12",
+            f";ABORT_KEY={keys.DEFAULT_KEY}",
         ]
     lines += preserved
 
@@ -613,8 +618,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
         help="DOS path of the games tree, e.g. \\GAMES (overrides --image-root)",
     )
     ap.add_argument("--abort-key",
-                    help="Force-exit key written to DGB.CFG: F1-F12, or a hex "
-                         "scancode. Left alone if not given.")
+                    help="Force-exit key written to DGB.CFG: %s "
+                         "(see README). Left alone if not given."
+                         % keys.describe())
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
     ap.add_argument(
@@ -633,6 +639,14 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+
+    # Catch a bad key here rather than writing it and letting ABORT.COM fall
+    # back to the default on the target, where the only symptom is a hotkey
+    # that quietly is not the one you asked for.
+    if getattr(args, "abort_key", None) and keys.resolve(args.abort_key) is None:
+        print(f"unrecognised abort key: {args.abort_key!r}", file=sys.stderr)
+        print(f"expected {keys.describe_full()}", file=sys.stderr)
+        return 1
 
     games_root = args.games_root.resolve()
     if not games_root.is_dir():

@@ -20,6 +20,12 @@
 ; memory free for the game that BROWSER.COM stays resident behind.
 MAX_ENT         equ     320             ; slots, including headers and spacers
 MAXLINE         equ     160             ; longest GAMES.LST line handled
+; DGB.CFG is read in one go. The shipped template is ~900 bytes and a
+; scanner-written one ~500, so this is comfortable headroom for a hand-edited
+; file; a GAMES_ROOT pushed past it would otherwise be ignored without a word,
+; which is why /T reports a truncated read.
+CFGBUF          equ     1024
+CFGREAD         equ     CFGBUF - 16
 TLEN            equ     32
 YLEN            equ     4
 GLEN            equ     12
@@ -238,7 +244,7 @@ detect_abort:
         mov     byte [abort_res], 1
 
         ; Which key is it watching? It is configurable, so the header must not
-        ; claim F12 when DGB.CFG says otherwise.
+        ; claim Scroll Lock when DGB.CFG says otherwise.
         mov     ax, 0AB07h
         int     2Fh
         cmp     al, 0ABh
@@ -281,7 +287,28 @@ build_abort_hint:
         call    putdec
         jmp     .tail
 
-.raw:   mov     si, s_keyword
+        ; Not a function key. Named keys come from the same table ABORT.COM
+        ; parses, so the hint can only ever show a name the config accepts.
+.raw:   mov     si, keyname_tab
+.nl:    mov     bx, si                  ; remember where this name starts
+        cmp     byte [si], 0
+        je      .hexraw                 ; end of table, no name for this code
+.nskip: cmp     byte [si], 0            ; walk to the NUL
+        je      .ncode
+        inc     si
+        jmp     .nskip
+.ncode: inc     si                      ; now at the code byte
+        cmp     [si], al
+        je      .nfound
+        inc     si                      ; on to the next entry
+        jmp     .nl
+.nfound:
+        mov     si, bx
+        call    cpy
+        jmp     .tail
+
+.hexraw:
+        mov     si, s_keyword
         call    cpy
         mov     al, [abort_scan]
         call    hexbyte
@@ -322,11 +349,18 @@ init_paths:
         mov     [fh], ax
         mov     ah, 3Fh
         mov     bx, [fh]
-        mov     cx, 240
+        mov     cx, CFGREAD
         mov     dx, cfg_buf
         int     21h
         jc      .ip_close
 
+        ; A short read means the whole file is here. A full one means there may
+        ; be more, and a GAMES_ROOT past the end would be ignored in silence --
+        ; so record it and let /T say so.
+        cmp     ax, CFGREAD
+        jb      .ip_term
+        mov     byte [cfg_cut], 1
+.ip_term:
         mov     si, cfg_buf
         add     si, ax
         mov     byte [si], 0
@@ -1904,7 +1938,7 @@ shrink_mem:
         push    es
         mov     ax, cs
         mov     es, ax
-        mov     bx, end_prog + MAX_ENT*ENT_SIZE
+        mov     bx, end_prog + MAX_ENT*ENT_SIZE + CFGBUF + 2
         add     bx, 15
         mov     cl, 4
         shr     bx, cl
@@ -2165,6 +2199,22 @@ launch:
         ret
 
 ; AL -> two hex digits at DI
+; kbc_byte - AL = a controller sample, AH = 0 when it was never taken.
+; Writes two hex digits, or "--" for a sample that does not exist, so a missing
+; reading can never be mistaken for a byte of 00h.
+kbc_byte:
+        push    ax
+        or      ah, ah
+        jz      .none
+        call    hexbyte
+        pop     ax
+        ret
+.none:  mov     al, '-'
+        stosb
+        stosb
+        pop     ax
+        ret
+
 hexbyte:
         push    ax
         mov     ah, al
@@ -2377,6 +2427,45 @@ selftest:
         mov     si, outbuf
         call    sout
         call    soutnl
+
+        ; KBC line: the 8042 command byte around the last game. Bit 0 is the
+        ; keyboard interrupt enable, so base=.1 with game=.0 means the game
+        ; told the controller to stop raising IRQ1 -- something no other
+        ; counter on the KBD line can show.
+        mov     ax, 0AB08h
+        int     2Fh                     ; BL base, BH game, CL last, CH valid
+        cmp     al, 0ABh
+        jne     .no_kbc
+        mov     [kbc_b], bl
+        mov     [kbc_g], bh
+        mov     [kbc_l], cl
+        mov     [kbc_v], ch
+
+        mov     di, outbuf
+        mov     si, st_kbc
+        call    cpy
+        mov     al, [kbc_b]
+        mov     ah, [kbc_v]
+        and     ah, 1
+        call    kbc_byte
+        mov     si, st_kbcgame
+        call    cpy
+        mov     al, [kbc_g]
+        mov     ah, [kbc_v]
+        and     ah, 2
+        call    kbc_byte
+        mov     si, st_kbclast
+        call    cpy
+        mov     al, [kbc_l]
+        mov     ah, [kbc_v]
+        and     ah, 4
+        call    kbc_byte
+        xor     al, al
+        stosb
+        mov     si, outbuf
+        call    sout
+        call    soutnl
+.no_kbc:
 .no_kbd:
 
         mov     si, st_cfg
@@ -2386,6 +2475,12 @@ selftest:
         mov     [st_ch], al
         mov     si, st_ch
         call    sout
+        ; Only mentioned when it happened, so a healthy dump stays unchanged.
+        cmp     byte [cfg_cut], 0
+        je      .cfg_whole
+        mov     si, st_cfgcut
+        call    sout
+.cfg_whole:
         call    soutnl
 
         mov     si, st_pfx
@@ -2634,7 +2729,7 @@ fcb0            times 37 db 0
 fcb1            times 37 db 0
 epb             times 14 db 0
 linebuf         times MAXLINE+2 db 0
-cfg_buf         times 256 db 0
+cfg_cut         db 0
 root_val        times 64 db 0
 
 ; Scratch for the one record fetch_rec has re-read from GAMES.LST.
@@ -2649,11 +2744,14 @@ r_note          times NLEN+1 db 0
 s_title         db 'DOS Game Browser',0
 s_keys          db 'Arrows move  Enter=Play',0   ; Shift+Esc is deliberately not shown
 s_abort         times 40 db 0           ; built by build_abort_hint
-s_abort_def     db 'F12 or CTRL+ALT+BKSP exits game',0
+s_abort_def     db 'SCRLOCK or CTRL+ALT+BKSP exits game',0
 s_keyword       db 'KEY ',0
 s_exits         db ' or CTRL+ALT+BKSP exits game',0
 fkey_codes      db 3Bh,3Ch,3Dh,3Eh,3Fh,40h,41h,42h,43h,44h,57h,58h
-abort_scan      db 58h
+abort_scan      db 46h                  ; Scroll Lock, matching ABORT.COM
+
+%include        "keynames.inc"
+
 s_noabort       db 'ABORT.COM not loaded - no force exit',0
 s_rule          db '------------------------------------------------------------------------------',0
 s_hdr           db '(category header)',0
@@ -2666,6 +2764,7 @@ err_code        db 'DOS error code: ',0
 s_crlf          db 13,10,0
 st_hdr          db 'DGB SELFTEST',0
 st_cfg          db 'CFG=',0
+st_cfgcut       db ' TRUNCATED - DGB.CFG is larger than the launcher reads',0
 st_pfx          db 'PFX=',0
 st_pfxa         db 'PFXABS=',0
 st_nent         db 'NENT=',0
@@ -2681,6 +2780,13 @@ st_kbdpend      db ' pend=',0
 st_kbdblk       db ' busydos=',0
 st_kbdmask      db ' irq1off=',0
 st_kbdtick      db ' wdticks=',0
+st_kbc          db 'KBC base=',0
+st_kbcgame      db ' game=',0
+st_kbclast      db ' last=',0
+kbc_b           db 0
+kbc_g           db 0
+kbc_l           db 0
+kbc_v           db 0
 st_fdir         db ' DIR=',0
 st_fexe         db ' EXE=',0
 st_fyear        db ' YEAR=',0
@@ -2704,3 +2810,9 @@ st_ch           db 0,0
 resident_min:                           ; shrink target while a child runs
 end_prog:                               ; the file ends here
 entries:                                ; RAM only, MAX_ENT*ENT_SIZE bytes
+
+; DGB.CFG is read into the scratch past the entry table rather than into the
+; image. It is only live during init_paths, which runs before load_list and
+; never while a game is running, so this buffer costs the file nothing and -
+; being past resident_min - costs a running game nothing either.
+cfg_buf         equ     entries + MAX_ENT*ENT_SIZE

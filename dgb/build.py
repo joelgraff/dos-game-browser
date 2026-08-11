@@ -7,6 +7,7 @@ same on Linux, macOS and Windows.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -75,7 +76,10 @@ def run(args: argparse.Namespace) -> int:
 
         out = BIN / out_rel
         out.parent.mkdir(parents=True, exist_ok=True)
-        cmd = [str(nasm), "-f", "bin", "-o", str(out), str(src)]
+        # -I so %include finds keynames.inc regardless of where nasm is run
+        # from; NASM only searches the includer's directory in newer versions.
+        cmd = [str(nasm), "-f", "bin", "-I", f"{SRC}{os.sep}",
+               "-o", str(out), str(src)]
         if args.verbose:
             print("  " + " ".join(cmd))
         rc = subprocess.call(cmd)
