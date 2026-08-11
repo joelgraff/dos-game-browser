@@ -2,8 +2,9 @@
 REM DOS Game Browser - kiosk entrypoint
 REM Run from the launcher directory, for example C:\DGB\
 REM
-REM ABORT.COM is a small TSR. With it loaded, F12 (or Ctrl+Alt+Backspace)
-REM force-exits a game that has stopped responding. Add /W after ABORT.COM
+REM ABORT.COM is a small TSR. With it loaded, Scroll Lock -- or Ctrl+Alt+
+REM Backspace -- force-exits a game that has stopped responding. Set
+REM ABORT_KEY in DGB.CFG to use a different key. Add /W after ABORT.COM
 REM only if a game takes the keyboard interrupt away; see docs/DIAGNOSTICS.md
 IF EXIST UTILS\ABORT.COM UTILS\ABORT.COM
 :LOOP

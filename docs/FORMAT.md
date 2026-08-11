@@ -109,10 +109,64 @@ the scanner says so and skips the file.
 ```ini
 ; DOS Game Browser runtime config
 GAMES_ROOT=\GAMES
+ABORT_KEY=F11
 ```
 
-- `GAMES_ROOT` is the DOS root used to resolve `dir` values from `GAMES.LST`.
-- If missing, launcher defaults preserve legacy behavior (`GAMES\` and `\GAMES\` fallback).
+| Key | Meaning |
+|-----|---------|
+| `GAMES_ROOT` | DOS root used to resolve `dir` values from `GAMES.LST` |
+| `ABORT_KEY` | The single-key force exit. A key name, `F1`–`F12`, or a raw make-code in hex |
+
+With no `DGB.CFG` at all the launcher falls back to `GAMES\` relative and
+`\GAMES\` absolute, so an image laid out that way needs no config.
+
+`ABORT_KEY` defaults to `SCRLOCK`; an unrecognised value falls back to that
+rather than guessing. `ABORT.COM /K:F11` overrides the file for a single run.
+
+Both scanners preserve settings they do not own when they rewrite this file, so
+a hand-edited `ABORT_KEY` survives a re-scan.
+
+The launcher reads the first 1 KB of this file. Beyond that it cannot honour a
+setting, and says `TRUNCATED` in its self-test rather than ignoring one quietly.
+
+## Key names and their make-codes
+
+| Name | Code | Also accepted as |
+|------|------|------------------|
+| `ESC` | `01` | |
+| `BKSP` | `0E` | `BACKSPACE` |
+| `TAB` | `0F` | |
+| `ENTER` | `1C` | |
+| `GRAVE` | `29` | `BACKTICK`, `TILDE` |
+| `PRTSC` | `37` | |
+| `SPACE` | `39` | |
+| `CAPSLOCK` | `3A` | |
+| `NUMLOCK` | `45` | |
+| `SCRLOCK` | `46` | `SCROLLLOCK` |
+| `HOME` | `47` | |
+| `UP` | `48` | |
+| `PGUP` | `49` | |
+| `LEFT` | `4B` | |
+| `RIGHT` | `4D` | |
+| `END` | `4F` | |
+| `DOWN` | `50` | |
+| `PGDN` | `51` | |
+| `INS` | `52` | |
+| `DEL` | `53` | |
+
+Anything not listed needs its hex make-code: letters run `A`=`1E`, `B`=`30`,
+`C`=`2E`, `D`=`20`, `E`=`12`, and so on — a letter is a poor choice anyway,
+since games use them for play. A hex code beginning with `F` cannot be written,
+because a leading `F` means a function key; nothing real is lost, as `F0`–`FF`
+are not make-codes.
+
+The browser's header shows whichever key is actually in force, so a rejected
+value is visible immediately rather than at the moment you need it.
+
+`src/keynames.inc` is the single definition of these names: `ABORT.COM` parses
+them with it and `BROWSER.COM` renders the on-screen hint from it, so the two
+cannot disagree. They are read once when `ABORT.COM` goes resident, so they cost
+file size and no run-time work.
 
 ---
 

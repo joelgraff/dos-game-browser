@@ -21,16 +21,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .paths import BIN, ROOT, dos_to_host_subpath, launcher_files
+from . import keys
+from .paths import (BIN, ROOT, display_path, dos_to_host_subpath,
+                    launcher_files)
 from . import scan as scan_mod
-
-
-def dos_to_host_subpath(dos_path: str) -> Path:
-    p = dos_path.strip().replace("/", "\\")
-    if ":" in p:
-        p = p.split(":", 1)[1]
-    p = p.lstrip("\\")
-    return Path(*[part for part in p.split("\\") if part])
 
 
 def install_launcher(
@@ -74,21 +68,26 @@ def install_launcher(
 
 def run_scanner(args: argparse.Namespace, image_root: Path, scan_root: Path,
                 launcher_dir: Path) -> int:
-    """Call the scanner directly; it is a module now, not a separate script."""
-    ns = argparse.Namespace(
-        games_root=scan_root,
-        launcher_dir=launcher_dir,
-        out=None,
-        image_root=image_root,
-        games_root_dos=None,
-        sort=args.sort,
-        no_headers=args.no_headers,
-        no_cfg=False,
-        apply_catalog=False,
-        catalog=scan_mod.CATALOG,
-        dry_run=args.dry_run,
-        verbose=args.verbose,
-    )
+    """
+    Call the scanner directly; it is a module now, not a separate script.
+
+    Its defaults are taken from its own parser rather than restated here, so
+    adding a scanner option cannot break install by leaving an attribute unset.
+    """
+    parser = argparse.ArgumentParser()
+    scan_mod.add_arguments(parser)
+    ns = parser.parse_args([
+        "--games-root", str(scan_root),
+        "--launcher-dir", str(launcher_dir),
+        "--image-root", str(image_root),
+    ])
+    ns.sort = args.sort
+    ns.no_headers = args.no_headers
+    ns.dry_run = args.dry_run
+    ns.verbose = args.verbose
+    if getattr(args, "abort_key", None):
+        ns.abort_key = args.abort_key
+
     sys.stdout.flush()
     return scan_mod.run(ns)
 
@@ -113,6 +112,10 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--dry-run", action="store_true", help="Show actions without writing files")
     ap.add_argument("--no-install", action="store_true", help="Skip copying launcher files")
     ap.add_argument("--no-scan", action="store_true", help="Skip scan and only install launcher files")
+    ap.add_argument("--abort-key",
+                    help="Force-exit key written to DGB.CFG: %s "
+                         "(see README). Left alone if not given."
+                         % keys.describe())
     ap.add_argument("--sort", choices=("genre", "year", "title"), default="genre")
     ap.add_argument("--no-headers", action="store_true")
     ap.add_argument(
@@ -180,9 +183,15 @@ def run(args: argparse.Namespace) -> int:
         print("setup failed: the scan reported an error", file=sys.stderr)
         return 2
 
+    # Testing under DOSBox before committing the card to real hardware is the
+    # whole point of use case 3, and it used to go unmentioned right at the
+    # moment it is most useful.
     print("\nNext steps:")
     print("  1. Review the GAME.TXT files the scan reported as needing it")
     print("  2. Re-run 'dgb.py scan' after editing them")
-    print("  3. Boot image and run START.BAT from launcher path")
+    print("  3. Try it under DOSBox before writing the card:")
+    print(f"       python dgb.py run --image-root {display_path(image_root)}"
+          f" --launcher-dir {dos_to_host_subpath(args.launcher_path)}")
+    print("  4. Then boot the image and run START.BAT from the launcher path")
     return 0
 

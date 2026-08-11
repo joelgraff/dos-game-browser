@@ -22,6 +22,18 @@ rather than here.
 
 ## 2. Copy it onto the DOS machine
 
+Put the floppy in the drive and run the installer on it:
+
+```
+A:
+INSTALL C:
+```
+
+That creates `C:\DGB`, copies everything in, and prints the next step. Give it a
+different drive letter if that suits the machine better — `INSTALL D:`.
+
+By hand it is only four commands, if you would rather see them:
+
 ```
 MD C:\DGB
 MD C:\DGB\UTILS
@@ -31,16 +43,18 @@ COPY A:\UTILS\*.*  C:\DGB\UTILS
 
 `C:\DGB` is only a suggestion. Anywhere on a writable drive is fine.
 
-What you just copied, about 17 KB in all:
+What you just copied, about 28 KB in all:
 
 | File | Role |
 |------|------|
 | `BROWSER.COM` | The launcher: reads `GAMES.LST`, runs games |
 | `SCAN.COM` | Builds `GAMES.LST` — step 4 below |
 | `START.BAT` | Loads the abort TSR, then loops the browser |
-| `UTILS\ABORT.COM` | TSR: **F12** force-exits a stuck game |
+| `UTILS\ABORT.COM` | TSR: **Scroll Lock** force-exits a stuck game |
 | `UTILS\VDETECT.COM` | Optional video detection |
+| `DGB.CFG` | Settings, all commented out — see below |
 | `INSTALL.TXT` | These instructions, readable with `TYPE` |
+| `INSTALL.BAT` | The copy step above, done for you |
 
 ## 3. Put your games somewhere
 
@@ -146,12 +160,38 @@ space cannot be trivially exited.
 
 ## If a game locks up
 
-Press **F12**. The abort TSR terminates the game and returns you to the menu.
-Ctrl+Alt+Backspace does the same thing.
+Press **Scroll Lock**. The abort TSR terminates the game and returns you to the
+menu. Ctrl+Alt+Backspace does the same thing.
 
 This will not work in every game — some read the keyboard hardware directly and
 never generate the interrupt the TSR watches. See
 [DIAGNOSTICS.md](DIAGNOSTICS.md).
+
+### If a game needs that key
+
+`DGB.CFG` in the launcher directory holds the settings — that is
+`C:\DGB\DGB.CFG`, next to `BROWSER.COM`, not one level up.
+
+It arrives with everything commented out, so the defaults apply. Changing the
+value is not enough: **delete the leading `;` too**, or the line stays a
+comment and nothing happens.
+
+```ini
+;ABORT_KEY=SCRLOCK  <- still a comment, does nothing
+ABORT_KEY=F11       <- active
+```
+
+A key name, `F1` to `F12`, or a raw make-code in hex. The names are listed in
+`DGB.CFG` itself and in the
+[FORMAT.md](FORMAT.md#key-names-and-their-make-codes). `EDIT` works fine:
+
+```
+EDIT C:\DGB\DGB.CFG
+```
+
+Re-running `SCAN` keeps the setting — it rewrites `GAMES_ROOT` and leaves
+everything else alone. The browser's header shows whichever key is active, so
+you can confirm it took.
 
 ## Limits
 

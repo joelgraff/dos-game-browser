@@ -17,12 +17,59 @@ from pathlib import Path
 
 from .paths import BIN, launcher_files
 
+# Run on the DOS machine straight off the floppy. Deliberately plain DOS 3.x
+# batch: no ECHO. (5.0+), no nested IF, no CALL, so it works on the oldest
+# targets this project supports.
+INSTALL_BAT = """\
+@ECHO OFF
+REM DOS Game Browser - copy this disk onto a hard drive.
+REM Usage:  A:  then  INSTALL C:
+IF "%1"=="" GOTO USAGE
+IF NOT EXIST BROWSER.COM GOTO WRONGDIR
+IF NOT EXIST %1\\NUL GOTO NODRIVE
+ECHO Installing DOS Game Browser to %1\\DGB
+MD %1\\DGB
+MD %1\\DGB\\UTILS
+COPY *.COM %1\\DGB > NUL
+COPY START.BAT %1\\DGB > NUL
+COPY DGB.CFG %1\\DGB > NUL
+COPY INSTALL.TXT %1\\DGB > NUL
+COPY UTILS\\*.* %1\\DGB\\UTILS > NUL
+IF NOT EXIST %1\\DGB\\BROWSER.COM GOTO FAILED
+ECHO Installed. Now build the index, pointing at your games:
+ECHO     %1
+ECHO     CD \\DGB
+ECHO     SCAN %1\\GAMES
+ECHO Then run START to launch the browser.
+GOTO END
+:USAGE
+ECHO Usage: INSTALL C:
+ECHO Copies this disk to C:\\DGB. Run it from this disk, so type A: first.
+GOTO END
+:WRONGDIR
+ECHO Run this from the disk it came on: type A: and then INSTALL C:
+GOTO END
+:NODRIVE
+ECHO Drive %1 was not found. Give a drive letter with a colon, as in C:
+GOTO END
+:FAILED
+ECHO Copy failed - is the disk full or write protected?
+:END
+"""
+
 INSTALL_TXT = """\
 DOS GAME BROWSER - INSTALLATION
 ===============================
 
-Copy the files on this disk into a directory on the DOS machine, for
-example C:\\DGB:
+Put this disk in the drive and run:
+
+    A:
+    INSTALL C:
+
+That copies everything to C:\\DGB. Use B: or D: instead if that suits
+the machine better.
+
+If you would rather do it by hand, INSTALL.BAT is only this:
 
     MD C:\\DGB
     MD C:\\DGB\\UTILS
@@ -52,7 +99,8 @@ Keys:
     Enter                       play
     A-Z                         jump to a title
     Esc                         quit (START.BAT restarts it)
-    F12                         force-exit a stuck game
+    Scroll Lock                 force-exit a stuck game
+                                (set ABORT_KEY in DGB.CFG to change it)
 
 To edit a game's details, edit GAME.TXT in that game's directory with
 any text editor (EDIT works), then re-run SCAN:
@@ -102,10 +150,19 @@ def run(args: argparse.Namespace) -> int:
         if args.verbose:
             print(f"  {rel}")
 
+    # A commented template, so the settings are discoverable before any scan
+    # has run. Never overwrite a real one.
+    cfg_src = BIN / "DGB.CFG"
+    cfg_dst = out / "DGB.CFG"
+    if cfg_src.is_file() and not cfg_dst.exists():
+        shutil.copy2(cfg_src, cfg_dst)
+        total += cfg_dst.stat().st_size
+
     if not args.no_instructions:
-        (out / "INSTALL.TXT").write_text(
-            INSTALL_TXT.replace("\n", "\r\n"), encoding="ascii", errors="replace")
-        total += (out / "INSTALL.TXT").stat().st_size
+        for name, body in (("INSTALL.TXT", INSTALL_TXT), ("INSTALL.BAT", INSTALL_BAT)):
+            (out / name).write_text(body.replace("\n", "\r\n"),
+                                    encoding="ascii", errors="replace")
+            total += (out / name).stat().st_size
 
     print(f"Staged {len(files)} launcher files to {out}")
     print(f"  total {total} bytes"

@@ -202,6 +202,57 @@ class ScanTest(TempDirTest):
                   "--image-root", str(self.tmp), "--no-cfg")
         self.assertFalse((self.tmp / "DGB" / "DGB.CFG").exists())
 
+    def test_existing_settings_survive_a_rescan(self):
+        """
+        ABORT_KEY is edited by hand on the DOS machine. Rewriting DGB.CFG
+        wholesale used to delete it on the next scan without saying anything.
+        """
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir()
+        (dgb / "DGB.CFG").write_bytes(
+            b"; old\r\nGAMES_ROOT=\\OLD\r\nABORT_KEY=F11\r\nSOMETHING=42\r\n")
+        self.scan("--games-root", str(g), "--launcher-dir", str(dgb),
+                  "--games-root-dos", "\\GAMES")
+        cfg = self.cfg_text(dgb)
+        self.assertIn("GAMES_ROOT=\\GAMES", cfg)      # ours, updated
+        self.assertIn("ABORT_KEY=F11", cfg)            # not ours, kept
+        self.assertIn("SOMETHING=42", cfg)             # not ours, kept
+        self.assertNotIn("OLD", cfg)                   # stale value gone
+
+    def test_generated_config_documents_the_abort_key(self):
+        """
+        A shipped template's comments do not survive the rewrite, so the
+        generated file has to carry the hint itself or the option is invisible.
+        """
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        self.scan("--games-root", str(g), "--launcher-dir", str(self.tmp / "DGB"),
+                  "--games-root-dos", "\\GAMES")
+        cfg = self.cfg_text(self.tmp / "DGB")
+        self.assertIn(";ABORT_KEY=SCRLOCK", cfg)    # commented, so inert
+        self.assertNotIn("\nABORT_KEY=", cfg)      # and not actually set
+
+    def test_the_hint_is_dropped_once_the_key_is_really_set(self):
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        dgb = self.tmp / "DGB"
+        dgb.mkdir()
+        (dgb / "DGB.CFG").write_bytes(b"ABORT_KEY=F11\r\n")
+        self.scan("--games-root", str(g), "--launcher-dir", str(dgb),
+                  "--games-root-dos", "\\GAMES")
+        cfg = self.cfg_text(dgb)
+        self.assertIn("ABORT_KEY=F11", cfg)
+        self.assertNotIn(";ABORT_KEY=SCRLOCK", cfg)
+
+    def test_abort_key_can_be_set_from_the_host(self):
+        g = self.tmp / "GAMES"
+        make_game(g / "JILL", "JILL.EXE")
+        self.scan("--games-root", str(g), "--launcher-dir", str(self.tmp / "DGB"),
+                  "--games-root-dos", "\\GAMES", "--abort-key", "F11")
+        self.assertIn("ABORT_KEY=F11", self.cfg_text(self.tmp / "DGB"))
+
     # -- capacity ---------------------------------------------------------
     def test_oversized_catalog_is_refused_and_nothing_written(self):
         g = self.tmp / "GAMES"

@@ -1,6 +1,7 @@
 """Installing the launcher into a mounted image, and staging it onto media."""
 from __future__ import annotations
 
+import sys
 import unittest
 from pathlib import Path
 
@@ -84,6 +85,53 @@ class StageTest(TempDirTest):
         run_dgb("stage", "--out", str(out))
         self.assertTrue((out / "SCAN.COM").is_file())
 
+    def test_stages_a_dos_side_installer(self):
+        """
+        UC1's user is at a DOS prompt with no modern PC. INSTALL.BAT turns
+        five hand-typed commands into 'A:' then 'INSTALL C:', which is both
+        shorter and impossible to mistype a path into.
+        """
+        out = self.tmp / "floppy"
+        run_dgb("stage", "--out", str(out))
+        bat = out / "INSTALL.BAT"
+        self.assertTrue(bat.is_file(), "no INSTALL.BAT staged")
+        raw = bat.read_bytes()
+        raw.decode("ascii")                 # raises if anything is non-ASCII
+        self.assertIn(b"\r\n", raw)
+        text = raw.decode("ascii")
+        # It copies the launcher and its UTILS subdirectory, and says what next.
+        self.assertIn("MD %1\\DGB", text)
+        self.assertIn("UTILS", text)
+        self.assertIn("SCAN", text)
+        # DOS 3.x batch only: ECHO. and CALL are later additions.
+        self.assertNotIn("ECHO.", text)
+
+    def test_ships_a_commented_config_template(self):
+        """
+        Without this there is no DGB.CFG until the first scan, so nothing tells
+        you ABORT_KEY exists.
+        """
+        out = self.tmp / "floppy"
+        run_dgb("stage", "--out", str(out))
+        cfg = out / "DGB.CFG"
+        self.assertTrue(cfg.is_file(), "no DGB.CFG staged")
+        text = cfg.read_bytes().decode("ascii")
+        self.assertIn("ABORT_KEY", text)
+        self.assertIn("GAMES_ROOT", text)
+        # every setting commented out, so it changes nothing until edited
+        for line in text.replace("\r", "").splitlines():
+            if line.strip() and not line.startswith(";"):
+                self.fail(f"template has an active setting: {line!r}")
+
+    def test_staging_never_overwrites_a_real_config(self):
+        out = self.tmp / "floppy"
+        out.mkdir()
+        (out / "DGB.CFG").write_bytes(b"GAMES_ROOT=\\MINE\r\nABORT_KEY=F11\r\n")
+        run_dgb("stage", "--out", str(out))
+        text = (out / "DGB.CFG").read_bytes().decode("ascii")
+        self.assertIn("GAMES_ROOT=\\MINE", text)
+        self.assertIn("ABORT_KEY=F11", text)
+
     def test_instructions_are_plain_ascii_with_crlf(self):
         """INSTALL.TXT is read with DOS TYPE, so it must be ASCII and CRLF."""
         out = self.tmp / "floppy"
@@ -97,6 +145,43 @@ class StageTest(TempDirTest):
         run_dgb("stage", "--out", str(out))
         total = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
         self.assertLess(total, 360 * 1024, f"staged set is {total} bytes")
+
+
+class RunTest(TempDirTest):
+    """
+    'run' launches an image; it must not launch an unprepared one silently.
+
+    Any case that gets as far as launching passes --dosbox, because a real
+    DOSBox window waits for a human and would hang the suite indefinitely.
+    """
+
+    NOOP = "true" if sys.platform != "win32" else "rem"
+
+    def test_unprepared_image_is_refused_with_advice(self):
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        r = run_dgb("run", "--image-root", str(self.tmp), "--launcher-dir", "DGB")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no launcher found", r.stderr)
+        self.assertIn("dgb.py install", r.stderr)
+        self.assertIn("--install", r.stderr)
+
+    def test_install_flag_prepares_the_image(self):
+        """One command from a bare image to a runnable one."""
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        r = run_dgb("run", "--install", "--image-root", str(self.tmp),
+                    "--launcher-dir", "DGB", "--dosbox", self.NOOP)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        dgb = self.tmp / "DGB"
+        for name in ("BROWSER.COM", "START.BAT", "GAMES.LST", "DGB.CFG"):
+            self.assertTrue((dgb / name).is_file(), f"{name} not installed")
+
+    def test_missing_index_is_warned_about(self):
+        make_game(self.tmp / "GAMES" / "ALPHA", "ALPHA.EXE")
+        run_dgb("install", "--image-root", str(self.tmp))
+        (self.tmp / "DGB" / "GAMES.LST").unlink()
+        r = run_dgb("run", "--image-root", str(self.tmp), "--launcher-dir", "DGB",
+                    "--dosbox", self.NOOP)
+        self.assertIn("no GAMES.LST", r.stderr)
 
 
 class DoctorTest(TempDirTest):

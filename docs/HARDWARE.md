@@ -1,76 +1,91 @@
 # Real hardware notes
 
-Media, memory and video specifics. For the step-by-step, see
-[Install on DOS](01-install-on-dos.md) or
-[Prepare an image](02-prepare-image.md).
+Media, memory and video specifics for the target machine. This is reference
+only — for what to actually type, use the guide that matches your situation:
 
-The launcher is developed and smoke-tested under **DOSBox / DOSBox Staging**. The supported production target is **original IBM PC–compatible hardware** running MS-DOS 5.x/6.x (or FreeDOS).
+| | |
+|-|-|
+| No modern PC involved | [Install on DOS](01-install-on-dos.md) |
+| Preparing a card or image on a modern PC | [Prepare an image](02-prepare-image.md) |
+| Trying it under emulation first | [Test in DOSBox](03-test-in-dosbox.md) |
 
-## Host vs target
+## Host and target
 
-| Role | Machine | Work done here |
-|------|---------|----------------|
-| **Host** | Modern Linux/macOS/Windows | Assemble binaries, fetch games, edit `GAME.TXT`, scan, stage media |
-| **Target** | 8086–Pentium DOS PC | Boot DOS, run `START.BAT` / `BROWSER.COM` only |
+| Role | Machine | What happens there |
+|------|---------|--------------------|
+| **Host** | Modern Linux, macOS or Windows | Assemble binaries, fetch games, edit `GAME.TXT`, scan, write media |
+| **Target** | 8086 to Pentium, MS-DOS 5/6 or FreeDOS | Boot DOS and run `START.BAT` |
 
-Never rely on long filenames, Unicode, or a network stack on the target.
+Nothing on the target may rely on long filenames, Unicode, or a network stack.
+The launcher is 8086 code with no CPU-specific instructions, so a genuine XT is
+a supported target rather than an aspiration.
 
-## Recommended media
+Use case 1 needs no host at all: `SCAN.COM` builds the index on the DOS machine
+itself.
 
-- CompactFlash (or SD) in an IDE/CF adapter — common for industrial 286–486 boards  
-- DOM / flash IDE modules  
-- Physical HDD / SSD with a DOS-compatible controller  
-- For tiny demos: 1.44 MB floppy (launcher + a few small games)
+## Media
 
-Format **FAT16** for volumes up to 2 GiB (widest BIOS/DOS compatibility). Install a bootable MS-DOS (or FreeDOS) system first, then copy the launcher files into their own directory, such as `C:\DGB\`.
+- CompactFlash or SD in an IDE adapter — the usual choice for 286–486 boards
+- DOM or flash IDE modules
+- A real hard disk, with a controller DOS can see
+- A 1.44 MB floppy is enough for the launcher plus a few small games
 
-## Copy checklist
+Format **FAT16**, up to 2 GiB per volume, for the widest BIOS and DOS
+compatibility. Install a bootable MS-DOS or FreeDOS first, then add the
+launcher.
 
-1. On the host: run the scanner (see README), then `python dgb.py stage`
-2. Mount the CF/USB volume on the host (or use a USB card reader)
-3. Copy the staged launcher files to a dedicated directory, such as `C:\DGB\`
-4. Edit target `AUTOEXEC.BAT` to `CALL C:\DGB\START.BAT` if you want kiosk auto-start
-5. Safely eject, insert in the target, boot
+## Where things go
 
-If you already have an MS-DOS image with games on it:
+The launcher directory and the games tree are separate, and neither location is
+assumed — you say where the games are when you scan, and that answer is recorded
+in `DGB.CFG` as `GAMES_ROOT`.
 
-1. Mount the image on the host system.
-2. Copy the launcher tree into its own directory inside the image, such as `C:\DGB\`.
-3. Place your game folders under `C:\DGB\GAMES\`.
-4. Re-run the scanner from the host after the games are copied in.
-5. Review and hand-edit the generated `GAME.TXT` files where the scanner could not infer correct metadata.
-6. Re-run the scanner, then stage the image again.
+```text
+C:\DGB\          BROWSER.COM, SCAN.COM, START.BAT, DGB.CFG, GAMES.LST, UTILS\
+C:\GAMES\        one directory per game, up to three levels deep
+```
 
-If the launcher is not at `C:\`, either:
+Putting the games *inside* the launcher directory works but is not recommended:
+the scanner has to exclude its own files, and it is easier to reason about when
+the two trees are separate.
 
-- `CD` to that directory before `BROWSER.COM`, or  
-- Keep `GAMES.LST` next to `BROWSER.COM` (the browser also tries `C:\GAMES.LST`)
+`BROWSER.COM` looks for `GAMES.LST` in the current directory, then `C:\GAMES.LST`
+— so run it from the launcher directory, which is what `START.BAT` does.
 
-Game paths inside `GAMES.LST` are relative to the games root recorded in `DGB.CFG` (`GAMES_ROOT`). Typically that is a `GAMES\` directory beside the browser.
+## Auto-start
 
-## Memory and TSRs
+To land on the menu at boot, add this to `AUTOEXEC.BAT`:
 
-- Load **only** `UTILS\ABORT.COM` for force-exit (small).  
-- Avoid large network stacks, mouse drivers, or disk caches if conventional memory is tight.  
-- Games may need EMS/XMS (`HIMEM.SYS` / `EMM386` / FreeDOS equivalents) — configure per title, not in the browser.
+```bat
+C:
+CD \DGB
+CALL START.BAT
+```
 
-## Force-exit
+`CALL` matters: without it, control never returns to `AUTOEXEC.BAT`.
 
-With `ABORT.COM` resident: **Ctrl+Alt+Backspace** terminates the current process so control returns to the browser loop. After abort, the browser restores IRQ vectors, text mode, and attempts to silence Sound Blaster / OPL / PC speaker leftovers.
+## Memory
 
-Not every protected-mode or DPMI title will unwind cleanly; still better than a cold reboot for most real-mode shareware.
+`BROWSER.COM` stays resident as the parent process while a game runs, costing
+that game about 8.9 KB; `ABORT.COM` costs about 1.1 KB more. The launcher hands
+its 11 KB entry table back to DOS before starting a child and takes it back
+afterwards, which is what makes the difference between a game starting and not.
+
+A real machine with drivers loaded has considerably less free memory than
+DOSBox's ~620 KB. If a game reports running out, check `MEM` on the target
+before suspecting the launcher — and see
+[Diagnostics](DIAGNOSTICS.md#a-game-starts-then-reports-out-of-memory).
 
 ## Video
 
-`BROWSER.COM` uses direct text VRAM (`B800` color / `B000` mono) and adjusts attributes. `VDETECT.COM` can write `VIDEO.CFG` if you build multi-profile batch wrappers; v1 of the browser does not require it.
+The browser picks colour or monochrome attributes automatically and drives text
+mode only, so MDA, CGA, EGA and VGA all work. `UTILS\VDETECT.COM` reports what
+it detected if the screen looks wrong on unusual hardware.
 
-## Verification on host before CF burn
+## Keyboard
 
-```bash
-`python dgb.py build`
-python dgb.py samples --dest <games-dir> --only HELLOWOR
-python dgb.py scan --games-root <games> --launcher-dir <launcher>
-python dgb.py run
-```
-
-Confirm menu navigation and that Enter launches the hello-world stub, then stage media.
+The force-exit key defaults to **Scroll Lock**, which exists on an 83-key XT
+keyboard — F11 and F12 do not. See the
+[FORMAT.md](FORMAT.md#runtime-dgbcfg) for how to change it, and
+[Diagnostics](DIAGNOSTICS.md#the-force-exit-does-nothing) for the games where no
+hotkey can reach.

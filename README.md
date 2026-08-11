@@ -7,7 +7,7 @@ The launcher is 8086 assembly so it runs on the machines it is for. The tooling
 that prepares a disk is Python, so it works the same on Linux, macOS and Windows.
 
 ```text
-  Arrows move  Enter=Play                F12 or CTRL+ALT+BKSP exits game
+  Arrows move  Enter=Play            SCRLOCK or CTRL+ALT+BKSP exits game
   ------------------------------------------------------------------------
   * Platform
       Commander Keen 1
@@ -36,11 +36,47 @@ Reference: **[file formats and limits](docs/FORMAT.md)** ·
 | Enter | Play |
 | A–Z | Jump to a title |
 | Esc | Quit — `START.BAT` restarts it, which is the kiosk behaviour |
-| **F12** | Force-exit a running game ([not every game](docs/DIAGNOSTICS.md#the-force-exit-does-nothing)) |
+| **Scroll Lock** | Force-exit a running game ([not every game](docs/DIAGNOSTICS.md#the-force-exit-does-nothing)) |
 
 There is also a maintenance exit that leaves the loop and drops to DOS, kept out
 of the UI so a machine in a public space cannot be trivially exited:
 **Shift+Esc**.
+
+## Choosing the force-exit key
+
+Scroll Lock is the default: no common DOS game reads it, and unlike F11/F12 it
+exists on an 83-key XT keyboard. To change it, edit `DGB.CFG` and **delete the
+leading `;`, or the line stays a comment**:
+
+```ini
+ABORT_KEY=F11
+```
+
+It takes a key name, `F1`–`F12`, or a raw make-code in hex —
+[the full list is in FORMAT.md](docs/FORMAT.md#key-names-and-their-make-codes).
+Ctrl+Alt+Backspace always works as well, whatever you set, so a mistake here
+cannot lock you out.
+
+## Status
+
+Feature-complete for its purpose, and exercised end to end under DOSBox — the
+test suite drives the real `.COM` files, not a model of them.
+
+Worth knowing before you deploy:
+
+- **Nothing here has been run on period hardware yet.** Everything is verified
+  under DOSBox and by construction. DOSBox is more forgiving than an 8086 about
+  memory and keyboard handling, so treat the first run on a real machine as the
+  actual test.
+- **The force-exit hotkey cannot reach every game.** Digger Remastered is the
+  known case, and *why* is still open — see
+  [Diagnostics](docs/DIAGNOSTICS.md#the-force-exit-does-nothing). Ctrl+Alt+Del
+  and the machine's power switch remain the fallback; most games are fine.
+- **Games that ship a DOSBox launch script** work under emulation and fail on
+  real DOS. The scanner detects and skips those in favour of the real
+  executable, but a script it does not recognise would slip through.
+- `DGB.CFG` is read up to 1 KB. Past that the launcher says `TRUNCATED` in its
+  self-test rather than silently ignoring a setting.
 
 ## Tooling
 
@@ -67,12 +103,13 @@ the tooling builds it wherever you point it.
 ## Contributing
 
 ```bash
-python dgb.py test        # 58 tests, about 30 seconds, nothing to install
+python dgb.py test        # the suite; about a minute, nothing to install
 python dgb.py build       # rebuild the .COM files (needs NASM)
 ```
 
 CI runs the suite on every push and fails if `bin/` does not match `src/`.
-The DOSBox-backed tests skip cleanly when DOSBox is absent.
+Tests that need NASM or DOSBox skip cleanly when those are absent, so the
+count you see locally depends on what is installed.
 
 Games are **not** included — copyright and size. `python dgb.py samples --list`
 shows a few freeware and public-domain titles for trying things out; you are

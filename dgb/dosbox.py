@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .paths import ROOT
+from .paths import ROOT, dos_to_host_subpath
 
 LOCAL_CFG = ROOT / "dgb-local.json"
 
@@ -99,6 +99,25 @@ def launch_command(dosbox: Path, commands: list[str]) -> list[str]:
     return cmd
 
 
+def _install_first(image_root: Path, launcher: str,
+                   args: argparse.Namespace) -> int:
+    """Prepare the image, reusing install rather than duplicating it."""
+    from . import install as install_mod
+
+    parser = argparse.ArgumentParser()
+    install_mod.add_arguments(parser)
+    ns = parser.parse_args([
+        "--image-root", str(image_root),
+        "--scan-root", args.scan_root,
+        "--launcher-path", launcher,
+        "--on-conflict", "overwrite",
+    ])
+    print(f"Preparing {image_root} ...")
+    rc = install_mod.run(ns)
+    print()
+    return rc
+
+
 def load_local() -> dict:
     if not LOCAL_CFG.is_file():
         return {}
@@ -127,6 +146,12 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
                     help="Program to run (default: saved, else START.BAT)")
     ap.add_argument("--save", action="store_true",
                     help="Remember these settings in dgb-local.json and exit")
+    ap.add_argument("--install", action="store_true",
+                    help="Install the launcher into the image first, then run")
+    ap.add_argument("--scan-root", default="GAMES",
+                    help="With --install: games tree, relative to the image root")
+    ap.add_argument("--dosbox", type=Path,
+                    help="Use this DOSBox binary instead of the detected one")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -151,7 +176,31 @@ def run(args: argparse.Namespace) -> int:
         print(f"Saved: {LOCAL_CFG}")
         return 0
 
-    dosbox = find_dosbox()
+    # 'run' launches an image; it does not prepare one. Starting DOSBox on an
+    # unprepared image drops the user at a prompt where 'cd \\DGB' fails, with
+    # nothing to explain why, so check first and say what to do.
+    launcher_host = image_root / dos_to_host_subpath(launcher)
+    if args.install:
+        rc = _install_first(image_root, launcher, args)
+        if rc != 0:
+            return rc
+    elif not (launcher_host / "BROWSER.COM").is_file():
+        print(f"no launcher found in {launcher_host}", file=sys.stderr)
+        print(file=sys.stderr)
+        print("Prepare the image first:", file=sys.stderr)
+        print(f"  python dgb.py install --image-root {image_root}", file=sys.stderr)
+        print("or do both in one step:", file=sys.stderr)
+        print(f"  python dgb.py run --install --image-root {image_root}",
+              file=sys.stderr)
+        return 1
+
+    if not (launcher_host / "GAMES.LST").is_file():
+        print(f"warning: no GAMES.LST in {launcher_host}; the browser will "
+              "report it as missing.", file=sys.stderr)
+        print("         build it with 'python dgb.py scan', or SCAN.COM in DOS.",
+              file=sys.stderr)
+
+    dosbox = args.dosbox or find_dosbox()
     if dosbox is None:
         print("DOSBox not found. Install it, then check: python dgb.py doctor",
               file=sys.stderr)
